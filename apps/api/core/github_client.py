@@ -11,15 +11,23 @@ from core.config import Settings
 
 class GitHubClient:
     def __init__(self, settings: Settings):
-        self._app_id = int(settings.github_app_id)
-        self._installation_id = int(settings.github_app_installation_id)
-        self._private_key = settings.github_app_private_key
-        self._integration = GithubIntegration(
-            auth=Auth.AppAuth(self._app_id, self._private_key)
-        )
-        token = self._integration.get_access_token(self._installation_id).token
-        self._token = token
-        self._gh = Github(auth=Auth.Token(token))
+        if settings.github_pat:
+            # PAT path: simpler, used when the org blocks third-party Apps.
+            self._token = settings.github_pat
+            self._gh = Github(auth=Auth.Token(self._token))
+        elif settings.github_app_id:
+            self._app_id = int(settings.github_app_id)
+            self._installation_id = int(settings.github_app_installation_id)
+            self._private_key = settings.github_app_private_key
+            self._integration = GithubIntegration(
+                auth=Auth.AppAuth(self._app_id, self._private_key)
+            )
+            self._token = self._integration.get_access_token(self._installation_id).token
+            self._gh = Github(auth=Auth.Token(self._token))
+        else:
+            raise RuntimeError(
+                "GitHub auth not configured: set GITHUB_PAT or the GITHUB_APP_* trio."
+            )
 
     # ------------------------------------------------------------------
     # Filesystem

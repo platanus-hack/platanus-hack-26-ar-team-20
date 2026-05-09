@@ -18,9 +18,10 @@ class Settings(BaseSettings):
     posthog_host: str = "https://app.posthog.com"
     posthog_project_id: str
 
-    github_app_id: str
-    github_app_private_key: str
-    github_app_installation_id: str
+    github_app_id: str = ""
+    github_app_private_key: str = ""
+    github_app_installation_id: str = ""
+    github_pat: str = ""
     github_demo_repo: str
 
     helix_demo_mode: bool = True
