@@ -87,7 +87,7 @@ Build everything with these 5 cards in mind. The whole demo walks through them.
 
 ## Demo path (what must work end-to-end on stage)
 
-1. User opens `/pomelo/experiments/new`, types "Mejorar conversión del carrito" → Brief returns problem card live.
+1. User opens `/team20/experiments/new`, types "Mejorar conversión del carrito" → Brief returns problem card live.
 2. Lab runs → 4 variants appear in card 2 + design appears in card 3.
 3. Architect compose runs → PR shows up in card 5 with link to GitHub.
 4. **Fast-forward 7d button** triggers Witness with seeded PostHog data → card 4 fills with the multi-arm table.

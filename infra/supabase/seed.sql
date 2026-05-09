@@ -1,51 +1,61 @@
 -- Helix demo seed.
--- Creates the Pomelo org, a single user (joa@pomelo.com),
+-- Creates the Team20 org, a single user (joa@team20.com),
 -- a connected repo, and one experiment already in `running` state
 -- so the demo can fast-forward to the Witness step.
 --
 -- Idempotent: safe to re-run via `supabase db reset`.
 
 ------------------------------------------------------------------------------
--- Pomelo org
+-- Team20 org
 ------------------------------------------------------------------------------
 insert into organizations (id, name, slug)
-values ('00000000-0000-0000-0000-000000000001', 'Pomelo', 'pomelo')
+values ('00000000-0000-0000-0000-000000000001', 'Team20', 'team20')
 on conflict (id) do nothing;
 
 ------------------------------------------------------------------------------
--- Demo user (joa@pomelo.com)
+-- Demo user (joa@team20.com)
 -- We insert directly into auth.users so the FK on public.users(id) is satisfied.
 -- Local-dev only; in production users come from Supabase Auth signup.
 ------------------------------------------------------------------------------
+-- GoTrue (Supabase Auth) reads token columns as Go strings — NULLs blow up
+-- with "converting NULL to string is unsupported". Insert empty strings.
 insert into auth.users (
   instance_id, id, aud, role, email,
   encrypted_password, email_confirmed_at,
   raw_app_meta_data, raw_user_meta_data,
   created_at, updated_at,
-  is_sso_user, is_anonymous
+  is_sso_user, is_anonymous,
+  confirmation_token, recovery_token,
+  email_change_token_new, email_change,
+  email_change_token_current, phone_change, phone_change_token,
+  reauthentication_token
 ) values (
   '00000000-0000-0000-0000-000000000000',
   '00000000-0000-0000-0000-0000000000a1',
   'authenticated', 'authenticated',
-  'joa@pomelo.com',
+  'joa@team20.com',
   crypt('demo-password', gen_salt('bf')),
   now(),
   '{"provider":"email","providers":["email"]}'::jsonb,
   '{"name":"Joa"}'::jsonb,
   now(), now(),
-  false, false
+  false, false,
+  '', '',
+  '', '',
+  '', '', '',
+  ''
 ) on conflict (id) do nothing;
 
 insert into public.users (id, org_id, email, role)
 values (
   '00000000-0000-0000-0000-0000000000a1',
   '00000000-0000-0000-0000-000000000001',
-  'joa@pomelo.com',
+  'joa@team20.com',
   'admin'
 ) on conflict (id) do nothing;
 
 ------------------------------------------------------------------------------
--- Connected repo: pomelo/checkout-svc
+-- Connected repo: helix-demo-saas
 ------------------------------------------------------------------------------
 insert into repos (id, org_id, github_repo_full_name)
 values (

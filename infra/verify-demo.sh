@@ -15,7 +15,7 @@
 #
 # Requires:
 #   - apps/api running on $HELIX_API_URL (default http://localhost:8000)
-#   - Supabase + the seed loaded (so the Pomelo org and repo exist)
+#   - Supabase + the seed loaded (so the Team20 org and repo exist)
 #   - jq, curl on PATH
 
 set -euo pipefail

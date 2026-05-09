@@ -22,7 +22,7 @@ router = APIRouter()
 
 SEED_EXPERIMENT_SLUG = "exp_cart_conv_2026"
 
-# The seed experiment ships with the original Pomelo problem, design, and
+# The seed experiment ships with the original Team20 problem, design, and
 # variants pre-loaded — see infra/supabase/seed.sql. Reset rehydrates it
 # so the verify-demo flow can replay end-to-end without recreating the
 # row (the demo repo only has variant files committed under
@@ -171,14 +171,14 @@ async def fast_forward(
 
 # ---------------------------------------------------------------------------
 # Reset — wipe agent_runs + decisions + extra experiments so the demo can
-# be replayed against a clean slate. The Pomelo seed experiment is
+# be replayed against a clean slate. The Team20 seed experiment is
 # restored to the same shape it has after seed.sql.
 # ---------------------------------------------------------------------------
 @router.post("/reset")
 async def reset_demo(supabase=Depends(get_supabase)) -> dict:
     _require_demo_mode()
 
-    # Wipe derived state for the Pomelo org. Order matters: agent_runs
+    # Wipe derived state for the Team20 org. Order matters: agent_runs
     # references experiments via on-delete-set-null, so we delete the
     # children first to keep the audit trail tidy.
     supabase.table("agent_runs").delete().eq("org_id", DEMO_ORG_ID).execute()

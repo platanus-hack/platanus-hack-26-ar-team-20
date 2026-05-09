@@ -36,7 +36,7 @@ from core.supabase_client import filter_experiment, get_supabase
 router = APIRouter()
 
 
-# Pomelo demo defaults — used when the caller doesn't pass org_id/repo_id.
+# Team20 demo defaults — used when the caller doesn't pass org_id/repo_id.
 DEMO_ORG_ID = "00000000-0000-0000-0000-000000000001"
 DEMO_REPO_ID = "00000000-0000-0000-0000-000000000010"
 

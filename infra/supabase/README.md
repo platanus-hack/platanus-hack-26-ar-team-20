@@ -9,7 +9,7 @@ infra/supabase/
 ├── config.toml              # Supabase CLI local config
 ├── migrations/
 │   └── 0001_init.sql        # tables + RLS + public.user_org_id() helper
-├── seed.sql                 # Pomelo org + joa@pomelo.com + running experiment
+├── seed.sql                 # Team20 org + joa@team20.com + running experiment
 └── README.md
 ```
 
@@ -50,7 +50,7 @@ Expected:
 ```
  slug   | name
 --------+--------
- pomelo | Pomelo
+ team20 | Team20
 
    experiment_id    | status
 --------------------+---------
@@ -89,7 +89,7 @@ $$;
 ```
 
 Each policy is `using (org_id = public.user_org_id())`. Requests authenticated
-as a Pomelo user only see Pomelo rows; anon sessions see nothing.
+as a Team20 user only see Team20 rows; anon sessions see nothing.
 
 The `service_role` key bypasses RLS — use it only from trusted backend code
 (workers, API server). Never ship it to the browser.
@@ -98,9 +98,9 @@ The `service_role` key bypasses RLS — use it only from trusted backend code
 
 | Field         | Value                                  |
 | ------------- | -------------------------------------- |
-| Org           | `Pomelo` (`pomelo`)                    |
-| User          | `joa@pomelo.com` / `demo-password`     |
-| Repo          | `pomelo/checkout-svc`                  |
+| Org           | `Team20` (`team20`)                    |
+| User          | `joa@team20.com` / `demo-password`     |
+| Repo          | `JoaquinGiorgis/helix-demo-saas`       |
 | Experiment    | `exp_cart_conv_2026` (status `running`)|
 
 The experiment is pre-loaded with a design and 4 variants (`control`,
