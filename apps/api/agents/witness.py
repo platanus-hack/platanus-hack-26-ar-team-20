@@ -21,44 +21,60 @@ from core.posthog_client import PostHogClient
 from core.supabase_client import filter_experiment
 
 
-# Demo-mode synthetic counts. Only used when HELIX_DEMO_MODE is true AND
+# Demo-mode synthetic rates. Only used when HELIX_DEMO_MODE is true AND
 # PostHog returns zero events for the arm — i.e. the demo is running
-# without a fully seeded analytics project. Numbers are tuned so that the
-# first treatment clears the p_best>0.90 + p_better>0.95 thresholds and
-# guardrails stay below the 3% harm floor. Keyed by role+rank so it works
-# whether or not Lab regenerates the variant keys.
-_DEMO_CONTROL_PRIMARY = (2000, 820)               # rate 0.41
-_DEMO_TREATMENT_PRIMARY: list[tuple[int, int]] = [
-    (2000, 1000),  # +9pp → the winner
-    (2000, 900),   # +4pp
-    (2000, 940),   # +6pp
-    (2000, 880),   # +3pp
-    (2000, 860),   # +2pp
+# without a fully seeded analytics project. Tuned so that the first
+# treatment clears the p_best>0.90 + p_better>0.95 thresholds and
+# guardrails stay below the 3% harm floor. Stored as rates (not absolute
+# counts) so we can scale n above whatever min_n_per_arm Lab declares,
+# guaranteeing the prompt's "n < min_n_per_arm → no_signal" rule never
+# trips on synthetic data.
+_DEMO_CONTROL_RATE = 0.41
+_DEMO_TREATMENT_RATES: list[float] = [
+    0.50,  # +9pp → the winner
+    0.45,  # +4pp
+    0.47,  # +6pp
+    0.44,  # +3pp
+    0.43,  # +2pp
 ]
-_DEMO_GUARDRAIL = {
-    "aov":                         (2000, 1000),  # neutral
-    "refund_rate_30d":             (2000, 40),    # ~2% (HARM_KPI but below 3% breach)
-    "support_tickets_per_user_7d": (2000, 30),    # ~1.5%
-    "abandonment_rate":            (2000, 30),    # ~1.5%
-    "refund_rate":                 (2000, 40),    # ~2%
-    "churn_30d":                   (2000, 60),    # ~3% (right at the line)
-    "support_load":                (2000, 30),
+# Default n_per_arm when the design has no min_n_per_arm declared.
+_DEMO_BASELINE_N = 2000
+# Multiplier applied to design.min_n_per_arm so we sit comfortably above
+# the threshold even if Lab regenerated a stricter design.
+_DEMO_N_OVERSHOOT = 1.6
+# Harm-direction guardrail rates (kept under the 3% relative-to-control
+# floor that the prompt uses to flag breaches).
+_DEMO_GUARDRAIL_RATES: dict[str, float] = {
+    "aov":                         0.50,    # neutral, near control
+    "refund_rate_30d":             0.020,   # 2.0%
+    "support_tickets_per_user_7d": 0.015,   # 1.5%
+    "abandonment_rate":            0.015,
+    "refund_rate":                 0.020,
+    "churn_30d":                   0.020,   # below 3% so no breach
+    "support_load":                0.015,
 }
 
 
+def _demo_target_n(min_n_per_arm: int | None) -> int:
+    if not min_n_per_arm or min_n_per_arm <= 0:
+        return _DEMO_BASELINE_N
+    return max(_DEMO_BASELINE_N, int(round(min_n_per_arm * _DEMO_N_OVERSHOOT)))
+
+
 def _demo_primary_stats(
-    is_control: bool, treatment_index: int
+    is_control: bool, treatment_index: int, n: int
 ) -> tuple[int, int]:
     if is_control:
-        return _DEMO_CONTROL_PRIMARY
-    safe_idx = max(
-        0, min(treatment_index, len(_DEMO_TREATMENT_PRIMARY) - 1)
-    )
-    return _DEMO_TREATMENT_PRIMARY[safe_idx]
+        rate = _DEMO_CONTROL_RATE
+    else:
+        idx = max(0, min(treatment_index, len(_DEMO_TREATMENT_RATES) - 1))
+        rate = _DEMO_TREATMENT_RATES[idx]
+    return n, int(round(rate * n))
 
 
-def _demo_guardrail_stats(kpi: str) -> tuple[int, int]:
-    return _DEMO_GUARDRAIL.get(kpi, (2000, 60))
+def _demo_guardrail_stats(kpi: str, n: int) -> tuple[int, int]:
+    rate = _DEMO_GUARDRAIL_RATES.get(kpi, 0.020)
+    return n, int(round(rate * n))
 
 
 HARM_KPIS = {
@@ -158,27 +174,55 @@ class WitnessAgent(BaseAgent):
                 return output
 
             since_iso = (started_at or now).isoformat()
+            min_n_per_arm = int(design.get("min_n_per_arm") or 0) or None
             arms = self._collect_arms(
                 flag_key=flag_key,
                 variants=variants,
                 primary_kpi=primary_kpi or "",
                 guardrail_kpis=guardrail_kpis,
                 since=since_iso,
+                min_n_per_arm=min_n_per_arm,
             )
             stats = self.posthog.thompson_multi_arm(arms=arms)
             n_total = sum(int(a["n"]) for a in arms)
 
-            demo_mode = bool(getattr(settings, "helix_demo_mode", False))
+            user_message = json.dumps(
+                {
+                    "experiment": {
+                        "experiment_id": exp["experiment_id"],
+                        "flag_key": flag_key,
+                        "primary_kpi": primary_kpi,
+                        "guardrail_kpis": guardrail_kpis,
+                        "days_live": days_live,
+                        "min_observation_days": min_obs,
+                        "max_observation_days": max_obs,
+                        "design": design,
+                        "started_at": exp.get("started_at"),
+                    },
+                    "arms": arms,
+                    "stats": stats,
+                    "n_total": n_total,
+                    "decision_rule": design.get("decision_rule"),
+                }
+            )
 
-            if demo_mode:
-                # Demo path: skip Claude and use the deterministic fallback.
-                # _collect_arms already injected canned counts when PostHog
-                # had nothing to read, so stats are favorable for the first
-                # treatment. Going through Claude here is both slower and
-                # less reliable — Sonnet sometimes refuses to declare a
-                # winner from synthetic-looking numbers, which kills the
-                # demo flow (verdict stays "no_signal", Director picks
-                # "wait", Consolidate never appears).
+            resp = await self.client.messages.create(
+                model=self.model,
+                max_tokens=4000,
+                system=self._load_prompt(),
+                messages=[{"role": "user", "content": user_message}],
+            )
+            tokens_in = resp.usage.input_tokens
+            tokens_out = resp.usage.output_tokens
+
+            text = next(
+                (b.text for b in resp.content if getattr(b, "type", None) == "text"),
+                "",
+            )
+
+            try:
+                output = WitnessOutput.model_validate_json(extract_json(text))
+            except (ValueError, ValidationError):
                 output = self._fallback_output(
                     exp=exp,
                     flag_key=flag_key,
@@ -189,54 +233,6 @@ class WitnessAgent(BaseAgent):
                     stats=stats,
                     n_total=n_total,
                 )
-            else:
-                user_message = json.dumps(
-                    {
-                        "experiment": {
-                            "experiment_id": exp["experiment_id"],
-                            "flag_key": flag_key,
-                            "primary_kpi": primary_kpi,
-                            "guardrail_kpis": guardrail_kpis,
-                            "days_live": days_live,
-                            "min_observation_days": min_obs,
-                            "max_observation_days": max_obs,
-                            "design": design,
-                            "started_at": exp.get("started_at"),
-                        },
-                        "arms": arms,
-                        "stats": stats,
-                        "n_total": n_total,
-                        "decision_rule": design.get("decision_rule"),
-                    }
-                )
-
-                resp = await self.client.messages.create(
-                    model=self.model,
-                    max_tokens=4000,
-                    system=self._load_prompt(),
-                    messages=[{"role": "user", "content": user_message}],
-                )
-                tokens_in = resp.usage.input_tokens
-                tokens_out = resp.usage.output_tokens
-
-                text = next(
-                    (b.text for b in resp.content if getattr(b, "type", None) == "text"),
-                    "",
-                )
-
-                try:
-                    output = WitnessOutput.model_validate_json(extract_json(text))
-                except (ValueError, ValidationError):
-                    output = self._fallback_output(
-                        exp=exp,
-                        flag_key=flag_key,
-                        primary_kpi=primary_kpi or "",
-                        days_live=days_live,
-                        min_obs=min_obs,
-                        arms=arms,
-                        stats=stats,
-                        n_total=n_total,
-                    )
 
             output.experiment_id = exp["experiment_id"]
             output.flag_key = flag_key
@@ -310,8 +306,12 @@ class WitnessAgent(BaseAgent):
         primary_kpi: str,
         guardrail_kpis: list[str],
         since: str,
+        min_n_per_arm: int | None = None,
     ) -> list[dict]:
         demo_mode = bool(getattr(settings, "helix_demo_mode", False))
+        # Synthetic n must sit above design.min_n_per_arm so the prompt's
+        # "n < min_n_per_arm → no_signal" rule never trips on canned data.
+        demo_n = _demo_target_n(min_n_per_arm)
         arms: list[dict] = []
         treatment_idx = 0
         for v in variants:
@@ -331,7 +331,7 @@ class WitnessAgent(BaseAgent):
             # use deterministic synthetic counts so the demo can produce a
             # winner end-to-end. Real data always wins (only kicks in on n=0).
             if demo_mode and n == 0:
-                n, conv = _demo_primary_stats(is_control, treatment_idx)
+                n, conv = _demo_primary_stats(is_control, treatment_idx, demo_n)
 
             guardrails: list[dict] = []
             for g_kpi in guardrail_kpis:
@@ -345,7 +345,7 @@ class WitnessAgent(BaseAgent):
                 except Exception:
                     g_n, g_conv = 0, 0
                 if demo_mode and g_n == 0:
-                    g_n, g_conv = _demo_guardrail_stats(g_kpi)
+                    g_n, g_conv = _demo_guardrail_stats(g_kpi, demo_n)
                 guardrails.append({"kpi": g_kpi, "n": g_n, "conv": g_conv})
 
             arms.append(
