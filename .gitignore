@@ -46,8 +46,8 @@ coverage.xml
 
 # --- Supabase ---
 .supabase/
-supabase/.branches/
-supabase/.temp/
+**/supabase/.branches/
+**/supabase/.temp/
 
 # --- IDE / OS ---
 .DS_Store
