@@ -1,16 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from datetime import datetime, timezone
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ValidationError
+
+from agents.architect import ArchitectAgent
 from agents.brief import BriefAgent
 from agents.lab import LabAgent
 from agents.schemas import (
+    ArchitectComposeInput,
+    ArchitectComposeOutput,
     BriefInput,
     BriefOutput,
     InterpretedProblem,
     LabInput,
     LabOutput,
+    LabVariant,
 )
 from core.anthropic_client import get_anthropic
+from core.config import settings
+from core.github_client import GitHubClient
+from core.posthog_client import PostHogClient
 from core.supabase_client import get_supabase
 
 router = APIRouter()
@@ -28,6 +37,23 @@ def get_lab_agent(
     supabase=Depends(get_supabase),
 ) -> LabAgent:
     return LabAgent(anthropic, supabase)
+
+
+def get_github() -> GitHubClient:
+    return GitHubClient(settings)
+
+
+def get_posthog() -> PostHogClient:
+    return PostHogClient(settings)
+
+
+def get_architect_agent(
+    anthropic=Depends(get_anthropic),
+    supabase=Depends(get_supabase),
+    github: GitHubClient = Depends(get_github),
+    posthog: PostHogClient = Depends(get_posthog),
+) -> ArchitectAgent:
+    return ArchitectAgent(anthropic, supabase, github, posthog)
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +150,69 @@ async def run_lab(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Architect — compose a multivariate PR + PostHog flag
+# ---------------------------------------------------------------------------
+@router.post(
+    "/{experiment_id}/architect/compose",
+    response_model=ArchitectComposeOutput,
+)
+async def architect_compose(
+    experiment_id: str,
+    agent: ArchitectAgent = Depends(get_architect_agent),
+    supabase=Depends(get_supabase),
+) -> ArchitectComposeOutput:
+    rows = (
+        supabase.table("experiments")
+        .select("id, org_id, experiment_id, design, variants")
+        .eq("id", experiment_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=404, detail=f"experiment {experiment_id} not found"
+        )
+    row = rows[0]
+    if not row.get("design"):
+        raise HTTPException(
+            status_code=409,
+            detail="experiment has no design yet — run /lab/run first",
+        )
+
+    design_data = dict(row["design"])
+    variants_raw = row.get("variants") or design_data.get("variants") or []
+    design_data["variants"] = variants_raw
+    design_data.setdefault("frozen", True)
+    design_data.setdefault(
+        "registered_at", datetime.now(timezone.utc).isoformat()
+    )
+
+    try:
+        design = LabOutput.model_validate(design_data)
+        variants = [LabVariant.model_validate(v) for v in variants_raw]
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=422, detail=f"corrupt experiment design: {e}"
+        )
+
+    try:
+        return await agent.run_compose(
+            ArchitectComposeInput(
+                experiment_id=row["experiment_id"],
+                design=design,
+                variants=variants,
+            ),
+            org_id=row["org_id"],
+            experiment_id=experiment_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except NotImplementedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
 
 
 @router.post("/{experiment_id}/run")

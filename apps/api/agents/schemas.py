@@ -179,3 +179,27 @@ class LabOutput(BaseModel):
                 "max_observation_days must be >= min_observation_days"
             )
         return self
+
+
+# ---------------------------------------------------------------------------
+# Architect
+# ---------------------------------------------------------------------------
+
+
+ArchitectMode = Literal["compose", "consolidate"]
+
+
+class ArchitectComposeInput(BaseModel):
+    experiment_id: str
+    design: LabOutput
+    variants: list[LabVariant]
+
+
+class ArchitectComposeOutput(BaseModel):
+    pr_url: str
+    branch: str
+    multivariate_flag_key: str
+    variants_implemented: list[str]
+    files_changed: list[str] = []
+    flag_rollout_pct: int = 30
+    demo_mode: bool = False
