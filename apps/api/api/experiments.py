@@ -418,3 +418,52 @@ async def director_run(
 @router.post("/{experiment_id}/run")
 async def run_experiment(experiment_id: str) -> dict[str, str]:
     return {"experiment_id": experiment_id, "status": "queued"}
+
+
+# ---------------------------------------------------------------------------
+# Demo helper — fast-forward an experiment so Witness will consider it ripe
+# ---------------------------------------------------------------------------
+class FastForwardRequest(BaseModel):
+    days: int = 8
+
+
+@router.post("/{experiment_id}/fast-forward")
+async def fast_forward(
+    experiment_id: str,
+    body: FastForwardRequest | None = None,
+    supabase=Depends(get_supabase),
+) -> dict[str, str]:
+    if not settings.helix_fast_forward_enabled:
+        raise HTTPException(
+            status_code=403, detail="HELIX_FAST_FORWARD_ENABLED is false"
+        )
+
+    rows = (
+        supabase.table("experiments")
+        .select("id, status, started_at")
+        .or_(f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}")
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=404, detail=f"experiment {experiment_id} not found"
+        )
+    row = rows[0]
+    if row["status"] != "running":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"experiment status is '{row['status']}', "
+                "fast-forward only valid in 'running'"
+            ),
+        )
+
+    days = (body.days if body else None) or 8
+    new_started_at = datetime.now(timezone.utc).timestamp() - days * 86400
+    iso = datetime.fromtimestamp(new_started_at, tz=timezone.utc).isoformat()
+    supabase.table("experiments").update({"started_at": iso}).eq(
+        "id", row["id"]
+    ).execute()
+    return {"experiment_id": experiment_id, "started_at": iso, "days": str(days)}
