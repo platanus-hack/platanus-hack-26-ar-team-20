@@ -168,43 +168,17 @@ class WitnessAgent(BaseAgent):
             stats = self.posthog.thompson_multi_arm(arms=arms)
             n_total = sum(int(a["n"]) for a in arms)
 
-            user_message = json.dumps(
-                {
-                    "experiment": {
-                        "experiment_id": exp["experiment_id"],
-                        "flag_key": flag_key,
-                        "primary_kpi": primary_kpi,
-                        "guardrail_kpis": guardrail_kpis,
-                        "days_live": days_live,
-                        "min_observation_days": min_obs,
-                        "max_observation_days": max_obs,
-                        "design": design,
-                        "started_at": exp.get("started_at"),
-                    },
-                    "arms": arms,
-                    "stats": stats,
-                    "n_total": n_total,
-                    "decision_rule": design.get("decision_rule"),
-                }
-            )
+            demo_mode = bool(getattr(settings, "helix_demo_mode", False))
 
-            resp = await self.client.messages.create(
-                model=self.model,
-                max_tokens=4000,
-                system=self._load_prompt(),
-                messages=[{"role": "user", "content": user_message}],
-            )
-            tokens_in = resp.usage.input_tokens
-            tokens_out = resp.usage.output_tokens
-
-            text = next(
-                (b.text for b in resp.content if getattr(b, "type", None) == "text"),
-                "",
-            )
-
-            try:
-                output = WitnessOutput.model_validate_json(extract_json(text))
-            except (ValueError, ValidationError):
+            if demo_mode:
+                # Demo path: skip Claude and use the deterministic fallback.
+                # _collect_arms already injected canned counts when PostHog
+                # had nothing to read, so stats are favorable for the first
+                # treatment. Going through Claude here is both slower and
+                # less reliable — Sonnet sometimes refuses to declare a
+                # winner from synthetic-looking numbers, which kills the
+                # demo flow (verdict stays "no_signal", Director picks
+                # "wait", Consolidate never appears).
                 output = self._fallback_output(
                     exp=exp,
                     flag_key=flag_key,
@@ -215,6 +189,54 @@ class WitnessAgent(BaseAgent):
                     stats=stats,
                     n_total=n_total,
                 )
+            else:
+                user_message = json.dumps(
+                    {
+                        "experiment": {
+                            "experiment_id": exp["experiment_id"],
+                            "flag_key": flag_key,
+                            "primary_kpi": primary_kpi,
+                            "guardrail_kpis": guardrail_kpis,
+                            "days_live": days_live,
+                            "min_observation_days": min_obs,
+                            "max_observation_days": max_obs,
+                            "design": design,
+                            "started_at": exp.get("started_at"),
+                        },
+                        "arms": arms,
+                        "stats": stats,
+                        "n_total": n_total,
+                        "decision_rule": design.get("decision_rule"),
+                    }
+                )
+
+                resp = await self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4000,
+                    system=self._load_prompt(),
+                    messages=[{"role": "user", "content": user_message}],
+                )
+                tokens_in = resp.usage.input_tokens
+                tokens_out = resp.usage.output_tokens
+
+                text = next(
+                    (b.text for b in resp.content if getattr(b, "type", None) == "text"),
+                    "",
+                )
+
+                try:
+                    output = WitnessOutput.model_validate_json(extract_json(text))
+                except (ValueError, ValidationError):
+                    output = self._fallback_output(
+                        exp=exp,
+                        flag_key=flag_key,
+                        primary_kpi=primary_kpi or "",
+                        days_live=days_live,
+                        min_obs=min_obs,
+                        arms=arms,
+                        stats=stats,
+                        n_total=n_total,
+                    )
 
             output.experiment_id = exp["experiment_id"]
             output.flag_key = flag_key
