@@ -1,6 +1,6 @@
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ExperimentRef(BaseModel):
@@ -111,3 +111,71 @@ class BriefOutput(BaseModel):
     clarification_options: list[str] = []
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     notes: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Lab
+# ---------------------------------------------------------------------------
+
+
+class LabVariant(BaseModel):
+    variant_key: str
+    is_control: bool = False
+    axis: Optional[str] = None
+    hypothesis: str
+    implementation_brief: str
+    expected_lift_pp: Optional[float] = None
+
+
+class LabInput(BaseModel):
+    interpreted_problem: InterpretedProblem
+    context: dict[str, Any] = Field(default_factory=dict)
+    constraints: dict[str, Any] = Field(default_factory=dict)
+
+
+class LabOutput(BaseModel):
+    primary_kpi: str
+    guardrail_kpis: list[str] = []
+    variants: list[LabVariant]
+    traffic_split: list[float]
+    min_n_per_arm: int = Field(..., ge=1)
+    min_observation_days: int = Field(..., ge=7)
+    max_observation_days: int = Field(..., ge=7)
+    decision_rule: str
+    frozen: bool = True
+    registered_at: str
+
+    @field_validator("variants")
+    @classmethod
+    def _variants_size(cls, v: list[LabVariant]) -> list[LabVariant]:
+        if not (2 <= len(v) <= 5):
+            raise ValueError(
+                f"variants must have between 2 and 5 entries, got {len(v)}"
+            )
+        keys = [x.variant_key for x in v]
+        if len(set(keys)) != len(keys):
+            raise ValueError(f"variant_keys must be unique, got {keys}")
+        controls = [x for x in v if x.is_control]
+        if len(controls) != 1:
+            raise ValueError(
+                f"exactly one variant must be is_control=true, got {len(controls)}"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _consistency(self) -> "LabOutput":
+        if len(self.traffic_split) != len(self.variants):
+            raise ValueError(
+                f"traffic_split length ({len(self.traffic_split)}) must equal "
+                f"variants length ({len(self.variants)})"
+            )
+        total = sum(self.traffic_split)
+        if abs(total - 1.0) > 0.001:
+            raise ValueError(
+                f"traffic_split must sum to 1.0 (±0.001), got {total:.4f}"
+            )
+        if self.max_observation_days < self.min_observation_days:
+            raise ValueError(
+                "max_observation_days must be >= min_observation_days"
+            )
+        return self
