@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ExperimentRef(BaseModel):
@@ -67,3 +67,47 @@ class IndexerOutput(BaseModel):
     delta: IndexerDelta
     alerts: list[IndexerAlert] = []
     stats: IndexerStats
+
+
+# ---------------------------------------------------------------------------
+# Shared problem schema (Brief output / Pulse output / Lab input)
+# ---------------------------------------------------------------------------
+
+ProblemType = Literal[
+    "funnel_leak",
+    "activation_drop",
+    "retention_drop",
+    "monetization_gap",
+    "engagement_drop",
+    "support_load",
+    "other",
+]
+
+
+class InterpretedProblem(BaseModel):
+    type: ProblemType
+    surface_area: str
+    description: str
+    primary_kpi: str
+    current_value: Optional[float] = None
+    target_lift_pp: float = 5.0
+    guardrail_kpis: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Brief
+# ---------------------------------------------------------------------------
+
+
+class BriefInput(BaseModel):
+    org_id: str
+    repo_id: str
+    human_brief: str
+
+
+class BriefOutput(BaseModel):
+    interpreted_problem: InterpretedProblem
+    needs_clarification: bool = False
+    clarification_options: list[str] = []
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    notes: Optional[str] = None
