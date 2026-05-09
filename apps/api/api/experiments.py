@@ -15,7 +15,10 @@ from agents.schemas import (
     LabInput,
     LabOutput,
     LabVariant,
+    WitnessInput,
+    WitnessOutput,
 )
+from agents.witness import WitnessAgent
 from core.anthropic_client import get_anthropic
 from core.config import settings
 from core.github_client import GitHubClient
@@ -54,6 +57,14 @@ def get_architect_agent(
     posthog: PostHogClient = Depends(get_posthog),
 ) -> ArchitectAgent:
     return ArchitectAgent(anthropic, supabase, github, posthog)
+
+
+def get_witness_agent(
+    anthropic=Depends(get_anthropic),
+    supabase=Depends(get_supabase),
+    posthog: PostHogClient = Depends(get_posthog),
+) -> WitnessAgent:
+    return WitnessAgent(anthropic, supabase, posthog)
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +224,46 @@ async def architect_compose(
         raise HTTPException(status_code=422, detail=str(e))
     except NotImplementedError as e:
         raise HTTPException(status_code=501, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Witness — read-side analysis of a running experiment
+# ---------------------------------------------------------------------------
+class WitnessRunRequest(BaseModel):
+    days_live: int | None = None
+
+
+@router.post("/{experiment_id}/witness/run", response_model=WitnessOutput)
+async def witness_run(
+    experiment_id: str,
+    body: WitnessRunRequest | None = None,
+    agent: WitnessAgent = Depends(get_witness_agent),
+    supabase=Depends(get_supabase),
+) -> WitnessOutput:
+    rows = (
+        supabase.table("experiments")
+        .select("id, org_id, experiment_id")
+        .or_(f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}")
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=404, detail=f"experiment {experiment_id} not found"
+        )
+    row = rows[0]
+    try:
+        return await agent.run(
+            WitnessInput(
+                experiment_id=row["experiment_id"],
+                days_live=body.days_live if body else None,
+            ),
+            org_id=row["org_id"],
+            experiment_id=row["id"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.post("/{experiment_id}/run")

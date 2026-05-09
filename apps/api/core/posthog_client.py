@@ -143,6 +143,78 @@ class PostHogClient:
         rows = payload.get("results") or []
         return [dict(zip(cols, row, strict=False)) for row in rows]
 
+    def query_variant_metrics(
+        self,
+        *,
+        flag_key: str,
+        variant_key: str,
+        kpi: str,
+        since: str,
+        until: str | None = None,
+    ) -> tuple[int, int]:
+        """
+        For a given multivariate flag exposure, returns (n, conv) where:
+
+        - n = unique distinct_id seen with `$feature_flag_called` for
+          (flag_key, variant_key) since `since`.
+        - conv = subset of those distinct_ids that also fired the `kpi`
+          event in the same window.
+
+        `since`/`until` are ISO-8601 timestamps. If `until` is None we use
+        now.
+        """
+        until_clause = "{until}" if until else "now()"
+        hogql = (
+            "WITH exposed AS ( "
+            "  SELECT distinct_id "
+            "  FROM events "
+            "  WHERE event = '$feature_flag_called' "
+            "   AND properties.$feature_flag = {flag_key} "
+            "   AND properties.$feature_flag_response = {variant_key} "
+            "   AND timestamp >= {since} "
+            f"   AND timestamp < {until_clause} "
+            "  GROUP BY distinct_id "
+            "), converted AS ( "
+            "  SELECT DISTINCT distinct_id FROM events "
+            "  WHERE event = {kpi} "
+            "   AND timestamp >= {since} "
+            f"   AND timestamp < {until_clause} "
+            ") "
+            "SELECT "
+            "  (SELECT count() FROM exposed) AS n, "
+            "  (SELECT count() FROM exposed WHERE distinct_id IN converted) AS conv"
+        )
+        values: dict[str, Any] = {
+            "flag_key": flag_key,
+            "variant_key": variant_key,
+            "kpi": kpi,
+            "since": since,
+        }
+        if until:
+            values["until"] = until
+
+        try:
+            resp = self._http.post(
+                f"/api/projects/{self._project_id}/query/",
+                json={
+                    "query": {
+                        "kind": "HogQLQuery",
+                        "query": hogql,
+                        "values": values,
+                    }
+                },
+            )
+            resp.raise_for_status()
+        except httpx.HTTPError:
+            return 0, 0
+        rows = resp.json().get("results") or []
+        if not rows:
+            return 0, 0
+        first = rows[0]
+        n = int(first[0] or 0) if isinstance(first, (list, tuple)) else int(first.get("n") or 0)
+        conv = int(first[1] or 0) if isinstance(first, (list, tuple)) else int(first.get("conv") or 0)
+        return n, conv
+
     def funnel(
         self,
         *,

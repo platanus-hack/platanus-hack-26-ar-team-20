@@ -203,3 +203,83 @@ class ArchitectComposeOutput(BaseModel):
     files_changed: list[str] = []
     flag_rollout_pct: int = 30
     demo_mode: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Witness
+# ---------------------------------------------------------------------------
+
+
+WitnessVerdict = Literal[
+    "too_early",
+    "no_signal",
+    "winner",
+    "loser",
+    "inconclusive",
+]
+
+
+ExperimentVerdict = Literal[
+    "too_early",
+    "no_signal",
+    "ship_winner",
+    "extend_top_two",
+    "kill_all",
+    "inconclusive",
+]
+
+
+class WitnessGuardrailReading(BaseModel):
+    kpi: str
+    rate: float = 0.0
+    rate_vs_control_rel: Optional[float] = None
+    breach: bool = False
+
+
+class WitnessVariantVerdict(BaseModel):
+    variant_key: str
+    is_control: bool = False
+    n: int = 0
+    conv: int = 0
+    rate: float = 0.0
+    p_better_than_control: float = 0.0
+    p_is_best: float = 0.0
+    guardrails: list[WitnessGuardrailReading] = []
+    guardrail_breach: bool = False
+    verdict: WitnessVerdict
+    rationale: str
+
+
+class WitnessRecommendedAction(BaseModel):
+    action: Literal[
+        "ramp_winner_kill_others",
+        "kill_variant",
+        "extend_top_two",
+        "kill_all",
+        "wait",
+    ]
+    flag_key: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    rationale: str
+
+
+class WitnessInput(BaseModel):
+    experiment_id: str
+    days_live: Optional[int] = None
+
+
+class WitnessOutput(BaseModel):
+    experiment_id: str
+    flag_key: str
+    primary_kpi: str
+    days_live: int
+    min_observation_days: int
+    n_total: int = 0
+    experiment_verdict: ExperimentVerdict
+    winning_variant: Optional[str] = None
+    variant_verdicts: list[WitnessVariantVerdict] = Field(default_factory=list)
+    recommended_actions: list[WitnessRecommendedAction] = Field(default_factory=list)
+    narrative: str = ""
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+
+
