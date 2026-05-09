@@ -4,7 +4,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from github import Auth, Github, GithubIntegration
+from github import Auth, Github, GithubException, GithubIntegration
+from github.InputGitTreeElement import InputGitTreeElement
 
 from core.config import Settings
 
@@ -74,21 +75,25 @@ class GitHubClient:
         branch: str,
         files: dict[str, str],
         message: str,
+        deletes: list[str] | None = None,
     ) -> str:
         repo_obj = self._gh.get_repo(repo)
         branch_ref = repo_obj.get_git_ref(f"heads/{branch}")
         base_sha = branch_ref.object.sha
         base_tree = repo_obj.get_git_tree(base_sha)
-        elements = []
+        elements: list[InputGitTreeElement] = []
         for path, content in files.items():
             blob = repo_obj.create_git_blob(content, "utf-8")
             elements.append(
-                {
-                    "path": path,
-                    "mode": "100644",
-                    "type": "blob",
-                    "sha": blob.sha,
-                }
+                InputGitTreeElement(
+                    path=path, mode="100644", type="blob", sha=blob.sha
+                )
+            )
+        for path in deletes or []:
+            elements.append(
+                InputGitTreeElement(
+                    path=path, mode="100644", type="blob", sha=None
+                )
             )
         tree = repo_obj.create_git_tree(elements, base_tree=base_tree)
         parent = repo_obj.get_git_commit(base_sha)
@@ -125,31 +130,62 @@ class GitHubClient:
         files: dict[str, str],
         title: str,
         body: str,
+        deletes: list[str] | None = None,
     ) -> str:
         repo_obj = self._gh.get_repo(repo)
+        owner_login = repo_obj.owner.login
+
+        try:
+            existing_prs = list(
+                repo_obj.get_pulls(
+                    state="open", head=f"{owner_login}:{branch}", base=base
+                )
+            )
+        except GithubException:
+            existing_prs = []
+        if existing_prs:
+            existing = existing_prs[0]
+            try:
+                existing.edit(title=title, body=body)
+            except GithubException:
+                pass
+            return existing.html_url
+
         base_ref = repo_obj.get_git_ref(f"heads/{base}")
         base_sha = base_ref.object.sha
 
-        repo_obj.create_git_ref(f"refs/heads/{branch}", base_sha)
+        try:
+            branch_ref = repo_obj.get_git_ref(f"heads/{branch}")
+            parent_sha = branch_ref.object.sha
+        except GithubException:
+            branch_ref = repo_obj.create_git_ref(
+                f"refs/heads/{branch}", base_sha
+            )
+            parent_sha = base_sha
 
-        elements = []
+        elements: list[InputGitTreeElement] = []
         for path, content in files.items():
             blob = repo_obj.create_git_blob(content, "utf-8")
             elements.append(
-                {
-                    "path": path,
-                    "mode": "100644",
-                    "type": "blob",
-                    "sha": blob.sha,
-                }
+                InputGitTreeElement(
+                    path=path, mode="100644", type="blob", sha=blob.sha
+                )
+            )
+        for path in deletes or []:
+            elements.append(
+                InputGitTreeElement(
+                    path=path, mode="100644", type="blob", sha=None
+                )
             )
 
-        tree = repo_obj.create_git_tree(elements, base_tree=repo_obj.get_git_tree(base_sha))
-        parent_commit = repo_obj.get_git_commit(base_sha)
-        commit = repo_obj.create_git_commit(message=title, tree=tree, parents=[parent_commit])
-
-        new_ref = repo_obj.get_git_ref(f"heads/{branch}")
-        new_ref.edit(commit.sha)
+        tree = repo_obj.create_git_tree(
+            elements, base_tree=repo_obj.get_git_tree(parent_sha)
+        )
+        parent_commit = repo_obj.get_git_commit(parent_sha)
+        commit = repo_obj.create_git_commit(
+            message=title, tree=tree, parents=[parent_commit]
+        )
+        branch_ref.edit(commit.sha)
 
         pr = repo_obj.create_pull(title=title, body=body, head=branch, base=base)
         return pr.html_url

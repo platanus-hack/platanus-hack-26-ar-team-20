@@ -10,6 +10,8 @@ from agents.lab import LabAgent
 from agents.schemas import (
     ArchitectComposeInput,
     ArchitectComposeOutput,
+    ArchitectConsolidateInput,
+    ArchitectConsolidateOutput,
     BriefInput,
     BriefOutput,
     DirectorInput,
@@ -231,6 +233,82 @@ async def architect_compose(
             ),
             org_id=row["org_id"],
             experiment_id=experiment_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except NotImplementedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Architect — consolidate a shipped experiment into zero-debt code
+# ---------------------------------------------------------------------------
+class ArchitectConsolidateRequest(BaseModel):
+    winning_variant: str | None = None
+    losing_variants: list[str] | None = None
+    flag_key: str | None = None
+
+
+@router.post(
+    "/{experiment_id}/architect/consolidate",
+    response_model=ArchitectConsolidateOutput,
+)
+async def architect_consolidate(
+    experiment_id: str,
+    body: ArchitectConsolidateRequest | None = None,
+    agent: ArchitectAgent = Depends(get_architect_agent),
+    supabase=Depends(get_supabase),
+) -> ArchitectConsolidateOutput:
+    rows = (
+        supabase.table("experiments")
+        .select(
+            "id, org_id, experiment_id, flag_key, variants, "
+            "winning_variant, status"
+        )
+        .or_(f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}")
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=404, detail=f"experiment {experiment_id} not found"
+        )
+    row = rows[0]
+
+    winner = (body.winning_variant if body else None) or row.get(
+        "winning_variant"
+    )
+    flag_key = (body.flag_key if body else None) or row.get("flag_key")
+    if not winner:
+        raise HTTPException(
+            status_code=409,
+            detail="experiment has no winning_variant — run /witness/run first",
+        )
+    if not flag_key:
+        raise HTTPException(
+            status_code=409,
+            detail="experiment has no flag_key — was it ever composed?",
+        )
+
+    if body and body.losing_variants is not None:
+        losers = list(body.losing_variants)
+    else:
+        all_variants = [
+            v.get("variant_key") for v in (row.get("variants") or [])
+        ]
+        losers = [v for v in all_variants if v and v != winner]
+
+    try:
+        return await agent.run_consolidate(
+            ArchitectConsolidateInput(
+                experiment_id=row["experiment_id"],
+                winning_variant=winner,
+                losing_variants=losers,
+                flag_key=flag_key,
+            ),
+            org_id=row["org_id"],
+            experiment_id=row["id"],
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

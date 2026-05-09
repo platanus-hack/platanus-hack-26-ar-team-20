@@ -205,6 +205,26 @@ class ArchitectComposeOutput(BaseModel):
     demo_mode: bool = False
 
 
+class ArchitectConsolidateInput(BaseModel):
+    experiment_id: str
+    winning_variant: str
+    losing_variants: list[str] = Field(default_factory=list)
+    flag_key: str
+
+
+class ArchitectConsolidateOutput(BaseModel):
+    pr_url: str
+    branch: str
+    flag_key: str
+    winning_variant: str
+    losing_variants: list[str] = Field(default_factory=list)
+    files_deleted: list[str] = Field(default_factory=list)
+    files_moved: list[dict[str, str]] = Field(default_factory=list)
+    switch_site: str
+    flag_deleted: bool = False
+    demo_mode: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Witness
 # ---------------------------------------------------------------------------
