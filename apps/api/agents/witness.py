@@ -16,8 +16,49 @@ from agents.schemas import (
     WitnessOutput,
     WitnessVariantVerdict,
 )
+from core.config import settings
 from core.posthog_client import PostHogClient
 from core.supabase_client import filter_experiment
+
+
+# Demo-mode synthetic counts. Only used when HELIX_DEMO_MODE is true AND
+# PostHog returns zero events for the arm — i.e. the demo is running
+# without a fully seeded analytics project. Numbers are tuned so that the
+# first treatment clears the p_best>0.90 + p_better>0.95 thresholds and
+# guardrails stay below the 3% harm floor. Keyed by role+rank so it works
+# whether or not Lab regenerates the variant keys.
+_DEMO_CONTROL_PRIMARY = (2000, 820)               # rate 0.41
+_DEMO_TREATMENT_PRIMARY: list[tuple[int, int]] = [
+    (2000, 1000),  # +9pp → the winner
+    (2000, 900),   # +4pp
+    (2000, 940),   # +6pp
+    (2000, 880),   # +3pp
+    (2000, 860),   # +2pp
+]
+_DEMO_GUARDRAIL = {
+    "aov":                         (2000, 1000),  # neutral
+    "refund_rate_30d":             (2000, 40),    # ~2% (HARM_KPI but below 3% breach)
+    "support_tickets_per_user_7d": (2000, 30),    # ~1.5%
+    "abandonment_rate":            (2000, 30),    # ~1.5%
+    "refund_rate":                 (2000, 40),    # ~2%
+    "churn_30d":                   (2000, 60),    # ~3% (right at the line)
+    "support_load":                (2000, 30),
+}
+
+
+def _demo_primary_stats(
+    is_control: bool, treatment_index: int
+) -> tuple[int, int]:
+    if is_control:
+        return _DEMO_CONTROL_PRIMARY
+    safe_idx = max(
+        0, min(treatment_index, len(_DEMO_TREATMENT_PRIMARY) - 1)
+    )
+    return _DEMO_TREATMENT_PRIMARY[safe_idx]
+
+
+def _demo_guardrail_stats(kpi: str) -> tuple[int, int]:
+    return _DEMO_GUARDRAIL.get(kpi, (2000, 60))
 
 
 HARM_KPIS = {
@@ -248,9 +289,12 @@ class WitnessAgent(BaseAgent):
         guardrail_kpis: list[str],
         since: str,
     ) -> list[dict]:
+        demo_mode = bool(getattr(settings, "helix_demo_mode", False))
         arms: list[dict] = []
+        treatment_idx = 0
         for v in variants:
             variant_key = v["variant_key"]
+            is_control = bool(v.get("is_control"))
             try:
                 n, conv = self.posthog.query_variant_metrics(
                     flag_key=flag_key,
@@ -260,6 +304,12 @@ class WitnessAgent(BaseAgent):
                 )
             except Exception:
                 n, conv = 0, 0
+
+            # Demo fallback: if PostHog has nothing seeded for this flag,
+            # use deterministic synthetic counts so the demo can produce a
+            # winner end-to-end. Real data always wins (only kicks in on n=0).
+            if demo_mode and n == 0:
+                n, conv = _demo_primary_stats(is_control, treatment_idx)
 
             guardrails: list[dict] = []
             for g_kpi in guardrail_kpis:
@@ -272,17 +322,21 @@ class WitnessAgent(BaseAgent):
                     )
                 except Exception:
                     g_n, g_conv = 0, 0
+                if demo_mode and g_n == 0:
+                    g_n, g_conv = _demo_guardrail_stats(g_kpi)
                 guardrails.append({"kpi": g_kpi, "n": g_n, "conv": g_conv})
 
             arms.append(
                 {
                     "key": variant_key,
-                    "is_control": bool(v.get("is_control")),
+                    "is_control": is_control,
                     "n": int(n),
                     "conv": int(conv),
                     "guardrails": guardrails,
                 }
             )
+            if not is_control:
+                treatment_idx += 1
         return arms
 
     # ------------------------------------------------------------------

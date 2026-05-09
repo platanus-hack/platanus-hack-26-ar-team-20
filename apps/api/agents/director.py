@@ -77,6 +77,14 @@ class DirectorAgent(BaseAgent):
                 decisions.append(decision)
 
                 if decision.action == "ship_winner" and decision.executed:
+                    # Flip the experiment row to 'shipped' so the consolidate
+                    # path (and the "Consolidate" UI button gated on
+                    # status==='shipped') becomes available.
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    self.db.table("experiments").update(
+                        {"status": "shipped", "shipped_at": now_iso}
+                    ).eq("id", exp_row_id).execute()
+
                     follow_up = DirectorFollowUp(
                         type="schedule_consolidate",
                         payload={

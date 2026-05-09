@@ -180,21 +180,12 @@ export async function runBrief(
 // ---------------------------------------------------------------------------
 // Persist confirmed problem as a fresh experiment row, then redirect to
 // the experiment detail page so the user can drive Lab/Architect/etc.
+//
+// Goes through the FastAPI backend (service-role key, RLS bypass) instead
+// of writing directly via the user's anon-keyed client. The 0001 migration
+// only declares `using` policies, so a direct anon insert hits the
+// default-deny path.
 // ---------------------------------------------------------------------------
-
-function slugifySurface(surface: string): string {
-  return surface
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 24);
-}
-
-function shortRandomId(): string {
-  return Math.random().toString(36).slice(2, 8);
-}
 
 export async function createExperimentFromBrief(
   orgSlug: string,
@@ -222,19 +213,18 @@ export async function createExperimentFromBrief(
   const repoId = repos?.[0]?.id;
   if (!repoId) return { ok: false, error: "no repo connected to this org" };
 
-  const surfaceSlug = slugifySurface(problem.surface_area || problem.type);
-  const experimentSlug = `exp_${surfaceSlug || "new"}_${shortRandomId()}`;
-
-  const { error: insertError } = await supabase.from("experiments").insert({
+  const created = await postJson("/experiments", {
+    problem,
     org_id: userRow.org_id,
     repo_id: repoId,
-    experiment_id: experimentSlug,
     source: "human_brief",
-    problem,
-    status: "designing",
   });
-  if (insertError) {
-    return { ok: false, error: insertError.message };
+  if (!created.ok) return created;
+
+  const data = created.data as { id?: string; experiment_id?: string };
+  const experimentSlug = data.experiment_id;
+  if (!experimentSlug) {
+    return { ok: false, error: "backend did not return experiment_id" };
   }
 
   revalidatePath(`/${orgSlug}`);

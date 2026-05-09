@@ -2,13 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  FlaskConical,
-  Flag,
-  ScrollText,
-  Settings,
-} from "lucide-react";
+import { LayoutDashboard, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Org = { id: string; name: string; slug: string } | null;
@@ -21,10 +15,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "", icon: LayoutDashboard, exact: true },
-  { label: "Experiments", href: "/experiments", icon: FlaskConical },
-  { label: "Features", href: "/features", icon: Flag },
-  { label: "Audit", href: "/audit", icon: ScrollText },
-  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Nuevo experimento", href: "/experiments/new", icon: Plus },
 ];
 
 export function Sidebar({ org }: { org: Org }) {
