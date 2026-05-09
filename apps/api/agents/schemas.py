@@ -283,3 +283,55 @@ class WitnessOutput(BaseModel):
     confidence: float = Field(0.0, ge=0.0, le=1.0)
 
 
+# ---------------------------------------------------------------------------
+# Director
+# ---------------------------------------------------------------------------
+
+
+DirectorAction = Literal[
+    "ship_winner",
+    "kill_variant",
+    "extend_top_two",
+    "kill_all",
+    "schedule_consolidate",
+    "wait",
+]
+
+
+class DirectorPolicy(BaseModel):
+    risk_tolerance: Literal["conservative", "balanced", "aggressive"] = "balanced"
+    max_blast_radius_pct: int = 50
+    require_human_approval_above_pct: int = 50
+    auto_merge_consolidation: bool = False
+    kill_protected_flags: list[str] = Field(default_factory=list)
+
+
+class DirectorDecision(BaseModel):
+    action: DirectorAction
+    flag_key: Optional[str] = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    before_state: Optional[dict[str, Any]] = None
+    after_state: Optional[dict[str, Any]] = None
+    rationale: str = ""
+    executed: bool = False
+    human_required: bool = False
+    blocked_by: Optional[str] = None
+    reversible_until: Optional[str] = None
+    decision_id: Optional[str] = None
+
+
+class DirectorFollowUp(BaseModel):
+    type: Literal["schedule_consolidate", "schedule_recheck", "notify_human"]
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class DirectorInput(BaseModel):
+    witness_output: WitnessOutput
+    user_policy: Optional[DirectorPolicy] = None
+
+
+class DirectorOutput(BaseModel):
+    experiment_id: str
+    decisions: list[DirectorDecision] = Field(default_factory=list)
+    follow_ups: list[DirectorFollowUp] = Field(default_factory=list)
+    summary_for_human: str = ""

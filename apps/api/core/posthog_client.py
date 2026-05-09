@@ -215,6 +215,10 @@ class PostHogClient:
         conv = int(first[1] or 0) if isinstance(first, (list, tuple)) else int(first.get("conv") or 0)
         return n, conv
 
+    def kill_variant(self, flag_key: str, variant_key: str) -> dict:
+        """Sets the rollout_percentage of a single variant to 0 while keeping the flag live."""
+        return self.set_variant_split(flag_key, {variant_key: 0})
+
     def funnel(
         self,
         *,

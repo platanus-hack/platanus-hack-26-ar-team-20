@@ -5,12 +5,16 @@ from pydantic import BaseModel, ValidationError
 
 from agents.architect import ArchitectAgent
 from agents.brief import BriefAgent
+from agents.director import DirectorAgent
 from agents.lab import LabAgent
 from agents.schemas import (
     ArchitectComposeInput,
     ArchitectComposeOutput,
     BriefInput,
     BriefOutput,
+    DirectorInput,
+    DirectorOutput,
+    DirectorPolicy,
     InterpretedProblem,
     LabInput,
     LabOutput,
@@ -65,6 +69,14 @@ def get_witness_agent(
     posthog: PostHogClient = Depends(get_posthog),
 ) -> WitnessAgent:
     return WitnessAgent(anthropic, supabase, posthog)
+
+
+def get_director_agent(
+    anthropic=Depends(get_anthropic),
+    supabase=Depends(get_supabase),
+    posthog: PostHogClient = Depends(get_posthog),
+) -> DirectorAgent:
+    return DirectorAgent(anthropic, supabase, posthog)
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +270,65 @@ async def witness_run(
             WitnessInput(
                 experiment_id=row["experiment_id"],
                 days_live=body.days_live if body else None,
+            ),
+            org_id=row["org_id"],
+            experiment_id=row["id"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Director — applies policy, executes against PostHog, writes decisions
+# ---------------------------------------------------------------------------
+class DirectorRunRequest(BaseModel):
+    user_policy: DirectorPolicy | None = None
+
+
+@router.post("/{experiment_id}/director/run", response_model=DirectorOutput)
+async def director_run(
+    experiment_id: str,
+    body: DirectorRunRequest | None = None,
+    witness: WitnessAgent = Depends(get_witness_agent),
+    director: DirectorAgent = Depends(get_director_agent),
+    supabase=Depends(get_supabase),
+) -> DirectorOutput:
+    rows = (
+        supabase.table("experiments")
+        .select("id, org_id, experiment_id, results")
+        .or_(f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}")
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=404, detail=f"experiment {experiment_id} not found"
+        )
+    row = rows[0]
+
+    witness_payload = row.get("results")
+    if witness_payload:
+        try:
+            witness_output = WitnessOutput.model_validate(witness_payload)
+        except ValidationError:
+            witness_output = await witness.run(
+                WitnessInput(experiment_id=row["experiment_id"]),
+                org_id=row["org_id"],
+                experiment_id=row["id"],
+            )
+    else:
+        witness_output = await witness.run(
+            WitnessInput(experiment_id=row["experiment_id"]),
+            org_id=row["org_id"],
+            experiment_id=row["id"],
+        )
+
+    try:
+        return await director.run(
+            DirectorInput(
+                witness_output=witness_output,
+                user_policy=body.user_policy if body else None,
             ),
             org_id=row["org_id"],
             experiment_id=row["id"],
