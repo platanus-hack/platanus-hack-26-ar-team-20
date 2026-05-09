@@ -1,0 +1,14 @@
+{
+  "name": "@helix/prompts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Markdown system prompts loaded by Helix agents at runtime.",
+  "files": [
+    "*.md"
+  ],
+  "scripts": {
+    "build": "echo \"(no build needed)\"",
+    "lint": "echo \"(no lint configured)\"",
+    "test": "echo \"(no tests yet)\""
+  }
+}
