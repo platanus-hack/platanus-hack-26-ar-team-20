@@ -60,6 +60,17 @@ class GitHubClient:
             return [items.name]
         return [it.name for it in items]
 
+    def path_exists(self, repo: str, path: str, *, ref: str | None = None) -> bool:
+        repo_obj = self._gh.get_repo(repo)
+        try:
+            if ref is not None:
+                repo_obj.get_contents(path, ref=ref)
+            else:
+                repo_obj.get_contents(path)
+        except GithubException:
+            return False
+        return True
+
     # ------------------------------------------------------------------
     # Write
     # ------------------------------------------------------------------

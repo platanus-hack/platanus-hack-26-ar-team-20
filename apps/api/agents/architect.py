@@ -404,10 +404,20 @@ class ArchitectAgent(BaseAgent):
             if new_switch is not None:
                 files_changes[switch_site] = new_switch
 
-            deletes = list(files_to_delete)
-            for src, _dst in files_to_move:
-                if files_changes.get(_dst) is not None:
-                    deletes.append(src)
+            actual_moves: list[tuple[str, str]] = [
+                (src, dst)
+                for src, dst in files_to_move
+                if files_changes.get(dst) is not None
+            ]
+
+            candidate_deletes = list(files_to_delete)
+            for src, _dst in actual_moves:
+                candidate_deletes.append(src)
+            deletes = [
+                p
+                for p in candidate_deletes
+                if self.github.path_exists(repo, p, ref=DEFAULT_BASE_BRANCH)
+            ]
 
             branch = (
                 f"helix/consolidate-{slug}-{date.today().isoformat()}"
@@ -422,7 +432,7 @@ class ArchitectAgent(BaseAgent):
                 body=self._render_consolidate_pr_body(
                     input_data=input_data,
                     files_deleted=deletes,
-                    files_moved=files_to_move,
+                    files_moved=actual_moves,
                     switch_site=switch_site,
                 ),
             )
@@ -441,7 +451,7 @@ class ArchitectAgent(BaseAgent):
                 losing_variants=losers,
                 files_deleted=deletes,
                 files_moved=[
-                    {"from": src, "to": dst} for src, dst in files_to_move
+                    {"from": src, "to": dst} for src, dst in actual_moves
                 ],
                 switch_site=switch_site,
                 flag_deleted=flag_deleted,
@@ -522,6 +532,84 @@ class ArchitectAgent(BaseAgent):
         experiment_id: str,
     ) -> str:
         component = self._pascal_case(winner)
+        new_import = f'import {component} from "{winner_path}";'
+        banner = (
+            f"// Auto-consolidated by Helix Architect — winner: "
+            f"{winner} (experiment {experiment_id}).\n"
+        )
+
+        exp_prefix = f"@/lib/experiments/{experiment_id}/"
+        saw_flag_hook = False
+        has_winner_import = False
+        kept_lines: list[str] = []
+        for line in original.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("import") and exp_prefix in line:
+                continue
+            if (
+                stripped.startswith("import")
+                and "useFeatureFlagVariantKey" in line
+            ):
+                saw_flag_hook = True
+                continue
+            if stripped.startswith("import") and winner_path in line:
+                has_winner_import = True
+            kept_lines.append(line)
+
+        if not saw_flag_hook:
+            return self._consolidate_template(
+                component=component,
+                winner=winner,
+                winner_path=winner_path,
+                experiment_id=experiment_id,
+            )
+
+        body = "\n".join(kept_lines)
+        body = re.sub(
+            r"^[ \t]*const\s+\w+\s*=\s*useFeatureFlagVariantKey\([^;]*\);"
+            r"[ \t]*\r?\n",
+            "",
+            body,
+            flags=re.MULTILINE,
+        )
+        body = re.sub(
+            r"^[ \t]*if\s*\(\s*\w+\s*===\s*\"[^\"]+\"\s*\)\s*return\s+"
+            r"<\w+(?:\s+\{\.\.\.[^}]*\})?\s*/>;[ \t]*\r?\n",
+            "",
+            body,
+            flags=re.MULTILINE,
+        )
+        body = re.sub(
+            r"return\s+<\w+(?P<spread>\s+\{\.\.\.[^}]*\})?\s*/>;",
+            lambda m: (
+                f"return <{component}"
+                + (m.group("spread") or " {...props}")
+                + " />;"
+            ),
+            body,
+            count=1,
+        )
+
+        if not has_winner_import:
+            imports = list(re.finditer(r"^import\s.*$", body, flags=re.MULTILINE))
+            if imports:
+                tail = imports[-1].end()
+                body = body[:tail] + "\n" + new_import + body[tail:]
+            else:
+                body = new_import + "\n\n" + body
+
+        if not body.endswith("\n"):
+            body += "\n"
+        return banner + body
+
+    def _consolidate_template(
+        self,
+        *,
+        component: str,
+        winner: str,
+        winner_path: str,
+        experiment_id: str,
+    ) -> str:
         return (
             f"// Auto-consolidated by Helix Architect — winner: "
             f"{winner} (experiment {experiment_id}).\n"
