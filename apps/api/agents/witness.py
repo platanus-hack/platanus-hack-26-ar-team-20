@@ -17,6 +17,7 @@ from agents.schemas import (
     WitnessVariantVerdict,
 )
 from core.posthog_client import PostHogClient
+from core.supabase_client import filter_experiment
 
 
 HARM_KPIS = {
@@ -214,12 +215,8 @@ class WitnessAgent(BaseAgent):
     # ------------------------------------------------------------------
     def _fetch_experiment(self, experiment_id: str) -> dict:
         rows = (
-            self.db.table("experiments")
-            .select(
-                "id, org_id, experiment_id, design, variants, flag_key, "
-                "started_at, status"
-            )
-            .or_(f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}")
+            filter_experiment(self.db.table("experiments").select("id, org_id, experiment_id, design, variants, flag_key, "
+                "started_at, status"), experiment_id)
             .limit(1)
             .execute()
             .data

@@ -1,3 +1,5 @@
+import re
+import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,9 +31,14 @@ from core.anthropic_client import get_anthropic
 from core.config import settings
 from core.github_client import GitHubClient
 from core.posthog_client import PostHogClient
-from core.supabase_client import get_supabase
+from core.supabase_client import filter_experiment, get_supabase
 
 router = APIRouter()
+
+
+# Pomelo demo defaults — used when the caller doesn't pass org_id/repo_id.
+DEMO_ORG_ID = "00000000-0000-0000-0000-000000000001"
+DEMO_REPO_ID = "00000000-0000-0000-0000-000000000010"
 
 
 def get_brief_agent(
@@ -112,21 +119,19 @@ async def run_brief(
 # Lab — multivariate experiment design
 # ---------------------------------------------------------------------------
 class LabRunRequest(BaseModel):
-    problem: InterpretedProblem
+    problem: InterpretedProblem | None = None
     constraints: dict | None = None
 
 
 @router.post("/{experiment_id}/lab/run", response_model=LabOutput)
 async def run_lab(
     experiment_id: str,
-    body: LabRunRequest,
+    body: LabRunRequest | None = None,
     agent: LabAgent = Depends(get_lab_agent),
     supabase=Depends(get_supabase),
 ) -> LabOutput:
     exp = (
-        supabase.table("experiments")
-        .select("id, org_id, repo_id")
-        .eq("id", experiment_id)
+        filter_experiment(supabase.table("experiments").select("id, org_id, repo_id, problem"), experiment_id)
         .limit(1)
         .execute()
         .data
@@ -134,6 +139,21 @@ async def run_lab(
     if not exp:
         raise HTTPException(status_code=404, detail=f"experiment {experiment_id} not found")
     row = exp[0]
+
+    problem = body.problem if body else None
+    if problem is None:
+        raw_problem = row.get("problem")
+        if not raw_problem:
+            raise HTTPException(
+                status_code=409,
+                detail="experiment has no problem yet — run /experiments/brief first",
+            )
+        try:
+            problem = InterpretedProblem.model_validate(raw_problem)
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=422, detail=f"corrupt experiment problem: {e}"
+            )
 
     feature_state = (
         supabase.table("feature_state")
@@ -166,12 +186,12 @@ async def run_lab(
     try:
         return await agent.run(
             LabInput(
-                interpreted_problem=body.problem,
+                interpreted_problem=problem,
                 context=context,
-                constraints=body.constraints or {},
+                constraints=(body.constraints if body else None) or {},
             ),
             org_id=row["org_id"],
-            experiment_id=experiment_id,
+            experiment_id=row["id"],
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -190,9 +210,7 @@ async def architect_compose(
     supabase=Depends(get_supabase),
 ) -> ArchitectComposeOutput:
     rows = (
-        supabase.table("experiments")
-        .select("id, org_id, experiment_id, design, variants")
-        .eq("id", experiment_id)
+        filter_experiment(supabase.table("experiments").select("id, org_id, experiment_id, design, variants"), experiment_id)
         .limit(1)
         .execute()
         .data
@@ -232,7 +250,7 @@ async def architect_compose(
                 variants=variants,
             ),
             org_id=row["org_id"],
-            experiment_id=experiment_id,
+            experiment_id=row["id"],
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -260,12 +278,8 @@ async def architect_consolidate(
     supabase=Depends(get_supabase),
 ) -> ArchitectConsolidateOutput:
     rows = (
-        supabase.table("experiments")
-        .select(
-            "id, org_id, experiment_id, flag_key, variants, "
-            "winning_variant, status"
-        )
-        .or_(f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}")
+        filter_experiment(supabase.table("experiments").select("id, org_id, experiment_id, flag_key, variants, "
+            "winning_variant, status"), experiment_id)
         .limit(1)
         .execute()
         .data
@@ -331,9 +345,7 @@ async def witness_run(
     supabase=Depends(get_supabase),
 ) -> WitnessOutput:
     rows = (
-        supabase.table("experiments")
-        .select("id, org_id, experiment_id")
-        .or_(f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}")
+        filter_experiment(supabase.table("experiments").select("id, org_id, experiment_id"), experiment_id)
         .limit(1)
         .execute()
         .data
@@ -372,9 +384,7 @@ async def director_run(
     supabase=Depends(get_supabase),
 ) -> DirectorOutput:
     rows = (
-        supabase.table("experiments")
-        .select("id, org_id, experiment_id, results")
-        .or_(f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}")
+        filter_experiment(supabase.table("experiments").select("id, org_id, experiment_id, results"), experiment_id)
         .limit(1)
         .execute()
         .data
@@ -421,6 +431,53 @@ async def run_experiment(experiment_id: str) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# Create a new experiment row from a Brief-shaped problem
+# ---------------------------------------------------------------------------
+class CreateExperimentRequest(BaseModel):
+    problem: InterpretedProblem
+    org_id: str | None = None
+    repo_id: str | None = None
+    experiment_id: str | None = None  # optional caller-supplied slug
+    source: str = "human_brief"
+
+
+@router.post("")
+async def create_experiment(
+    body: CreateExperimentRequest,
+    supabase=Depends(get_supabase),
+) -> dict[str, str]:
+    org_id = body.org_id or DEMO_ORG_ID
+    repo_id = body.repo_id or DEMO_REPO_ID
+
+    if body.experiment_id:
+        slug = body.experiment_id
+    else:
+        surface = body.problem.surface_area or body.problem.type or "new"
+        normalized = re.sub(r"[^a-z0-9]+", "_", surface.lower()).strip("_")[:24]
+        slug = f"exp_{normalized or 'new'}_{secrets.token_hex(3)}"
+
+    inserted = (
+        supabase.table("experiments")
+        .insert(
+            {
+                "org_id": org_id,
+                "repo_id": repo_id,
+                "experiment_id": slug,
+                "source": body.source,
+                "problem": body.problem.model_dump(),
+                "status": "designing",
+            }
+        )
+        .execute()
+        .data
+    )
+    if not inserted:
+        raise HTTPException(status_code=500, detail="failed to insert experiment")
+    row = inserted[0]
+    return {"id": row["id"], "experiment_id": row["experiment_id"]}
+
+
+# ---------------------------------------------------------------------------
 # Demo helper — fast-forward an experiment so Witness will consider it ripe
 # ---------------------------------------------------------------------------
 class FastForwardRequest(BaseModel):
@@ -439,9 +496,7 @@ async def fast_forward(
         )
 
     rows = (
-        supabase.table("experiments")
-        .select("id, status, started_at")
-        .or_(f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}")
+        filter_experiment(supabase.table("experiments").select("id, status, started_at"), experiment_id)
         .limit(1)
         .execute()
         .data

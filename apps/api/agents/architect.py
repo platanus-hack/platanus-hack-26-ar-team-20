@@ -20,6 +20,7 @@ from agents.schemas import (
 from core.config import settings
 from core.github_client import GitHubClient
 from core.posthog_client import PostHogClient
+from core.supabase_client import filter_experiment
 
 
 COMPOSE_FLAG_ROLLOUT_PCT = 30
@@ -484,13 +485,7 @@ class ArchitectAgent(BaseAgent):
 
     def _fetch_experiment(self, experiment_id: str) -> dict:
         rows = (
-            self.db.table("experiments")
-            .select(
-                "id, org_id, experiment_id, flag_key, design, variants, status"
-            )
-            .or_(
-                f"id.eq.{experiment_id},experiment_id.eq.{experiment_id}"
-            )
+            filter_experiment(self.db.table("experiments").select("id, org_id, experiment_id, flag_key, design, variants, status"), experiment_id)
             .limit(1)
             .execute()
             .data
