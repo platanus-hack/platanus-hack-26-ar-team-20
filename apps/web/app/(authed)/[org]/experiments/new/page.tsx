@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { NewExperimentForm } from "@/components/experiment/NewExperimentForm";
 
 export default async function NewExperimentPage({
   params,
@@ -8,25 +8,18 @@ export default async function NewExperimentPage({
   const { org } = await params;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">New experiment</h1>
-        <p className="text-sm text-muted-foreground">
-          Org <span className="font-medium text-foreground">/{org}</span>
+    <div className="mx-auto max-w-3xl space-y-6 py-6">
+      <div className="text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Nuevo experimento
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Helix interpreta el brief, propone un KPI primario y guardrails antes
+          de pasar al Lab.
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Placeholder</CardTitle>
-          <CardDescription>
-            Form to define hypothesis, arms, target metric, and guardrails goes here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Wired up in D2.
-        </CardContent>
-      </Card>
+      <NewExperimentForm orgSlug={org} />
     </div>
   );
 }
