@@ -51,7 +51,7 @@ insert into repos (id, org_id, github_repo_full_name)
 values (
   '00000000-0000-0000-0000-000000000010',
   '00000000-0000-0000-0000-000000000001',
-  'pomelo/checkout-svc'
+  'JoaquinGiorgis/helix-demo-saas'
 ) on conflict (org_id, github_repo_full_name) do nothing;
 
 ------------------------------------------------------------------------------
