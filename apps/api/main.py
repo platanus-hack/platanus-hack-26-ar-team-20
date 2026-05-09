@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 
-from api import experiments, webhooks
+from api import experiments, internal, webhooks
 
 app = FastAPI(title="Helix API", version="0.1.0")
 app.include_router(experiments.router, prefix="/experiments", tags=["experiments"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
+app.include_router(internal.router, prefix="/internal", tags=["internal"])
 
 
 @app.get("/healthz")

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 from pydantic import BaseModel
 
 
@@ -17,7 +17,7 @@ class BaseAgent(ABC):
     name: str
     model: str
 
-    def __init__(self, anthropic_client: Anthropic, supabase_client):
+    def __init__(self, anthropic_client: AsyncAnthropic, supabase_client):
         self.client = anthropic_client
         self.db = supabase_client
 
