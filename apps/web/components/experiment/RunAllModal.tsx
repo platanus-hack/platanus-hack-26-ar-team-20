@@ -7,6 +7,7 @@ import {
   Circle,
   ExternalLink,
   Loader2,
+  Rocket,
   Sparkles,
   XCircle,
 } from "lucide-react";
@@ -22,11 +23,9 @@ import { cn } from "@/lib/utils";
 import {
   type AgentActionResult,
   runArchitectCompose,
-  runArchitectConsolidate,
   runDemoReset,
   runDirector,
   runFastForward,
-  runFastForwardShipped,
   runLab,
   runWitness,
 } from "@/lib/agent-actions";
@@ -37,9 +36,7 @@ type StepKey =
   | "compose"
   | "ff_started"
   | "witness"
-  | "director"
-  | "ff_shipped"
-  | "consolidate";
+  | "director";
 
 type StepStatus = "idle" | "running" | "done" | "error" | "skipped";
 
@@ -92,20 +89,6 @@ const STEPS: StepConfig[] = [
     title: "Director is applying policy",
     description:
       "Ejecutando ship_winner contra PostHog (winner a 100%, perdedoras a 0%) y registrando la decisión.",
-  },
-  {
-    key: "ff_shipped",
-    agentLabel: "Helix",
-    title: "Fast-forwarding consolidation grace",
-    description:
-      "Comprimo los 7 días de gracia post-ship antes del cleanup.",
-  },
-  {
-    key: "consolidate",
-    agentLabel: "Architect",
-    title: "Architect is cleaning up the codebase",
-    description:
-      "PR de cleanup: borra archivos de variantes perdedoras, mueve la ganadora fuera de lib/experiments/, e inlina el switch site.",
   },
 ];
 
@@ -244,20 +227,6 @@ export function RunAllModal({
       );
       if (!director) return abort();
 
-      // 6. Fast-forward shipped_at (the experiments-router /fast-forward
-      // only handles started_at; for shipped_at we call /demo/fast-forward
-      // with target=shipped_at via runFastForwardShipped).
-      const ff2 = await execStep("ff_shipped", () =>
-        runFastForwardShipped(experimentSlug, orgPath)
-      );
-      if (!ff2) return abort();
-
-      // 7. Architect consolidate
-      const consolidate = await execStep("consolidate", () =>
-        runArchitectConsolidate(experimentSlug, orgPath)
-      );
-      if (!consolidate) return abort();
-
       setCurrentStep(null);
       setDone(true);
       router.refresh();
@@ -360,6 +329,22 @@ export function RunAllModal({
             );
           })}
         </ol>
+
+        {done && (
+          <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50/70 p-4">
+            <Rocket className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-blue-900">
+                Tus feature flags ya están en producción.
+              </p>
+              <p className="text-xs leading-relaxed text-blue-800">
+                El experimento queda corriendo con el winner al 100% de tráfico.
+                En 7 días vas a tener los primeros resultados de Witness con
+                Bayesian posteriors y guardrails consolidados.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end">
           <Button
