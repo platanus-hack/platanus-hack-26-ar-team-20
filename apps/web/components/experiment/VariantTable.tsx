@@ -34,8 +34,8 @@ function pct(rate: number | undefined): string {
 function ppLift(
   variant: VariantVerdict,
   control: VariantVerdict | undefined
-): string {
-  if (variant.is_control) return "—";
+): { text: string; positive: boolean | null } {
+  if (variant.is_control) return { text: "—", positive: null };
   if (
     !control ||
     variant.rate === undefined ||
@@ -43,11 +43,11 @@ function ppLift(
     Number.isNaN(variant.rate) ||
     Number.isNaN(control.rate)
   ) {
-    return "—";
+    return { text: "—", positive: null };
   }
   const diff = (variant.rate - control.rate) * 100;
   const sign = diff > 0 ? "+" : "";
-  return `${sign}${diff.toFixed(1)}pp`;
+  return { text: `${sign}${diff.toFixed(1)}pp`, positive: diff > 0 };
 }
 
 function pBest(variant: VariantVerdict): string {
@@ -56,102 +56,114 @@ function pBest(variant: VariantVerdict): string {
   return p.toFixed(2);
 }
 
-function rowTone(
-  variant: VariantVerdict,
-  isWinner: boolean
-): { row: string; verdict: string } {
-  if (isWinner)
-    return {
-      row: "bg-green-50/60 hover:bg-green-50",
-      verdict: "text-green-800 bg-green-100 ring-green-200",
-    };
-  if (variant.verdict === "loser" || variant.guardrail_breach)
-    return {
-      row: "bg-red-50/40 hover:bg-red-50",
-      verdict: "text-red-800 bg-red-100 ring-red-200",
-    };
-  if (variant.is_control)
-    return {
-      row: "",
-      verdict: "text-blue-800 bg-blue-100 ring-blue-200",
-    };
-  return {
-    row: "",
-    verdict: "text-muted-foreground bg-muted ring-border",
-  };
+type Tone = "winner" | "loser" | "control" | "neutral";
+
+function rowTone(variant: VariantVerdict, isWinner: boolean): Tone {
+  if (isWinner) return "winner";
+  if (variant.verdict === "loser" || variant.guardrail_breach) return "loser";
+  if (variant.is_control) return "control";
+  return "neutral";
 }
+
+const ROW_TONE: Record<Tone, string> = {
+  winner: "bg-success-soft/40",
+  loser: "bg-danger-soft/30",
+  control: "",
+  neutral: "",
+};
+
+const VERDICT_TONE: Record<Tone, string> = {
+  winner: "border-success/15 bg-success-soft text-success",
+  loser: "border-danger/15 bg-danger-soft text-danger",
+  control: "border-info/15 bg-info-soft text-info",
+  neutral: "border-border bg-surface-2 text-muted-foreground-strong",
+};
 
 export function VariantTable({ variants, winningVariant, primaryKpi }: Props) {
   const control = variants.find((v) => v.is_control);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {primaryKpi && (
-        <p className="text-xs text-muted-foreground">
-          Primary KPI ·{" "}
-          <span className="font-mono text-foreground">{primaryKpi}</span>
-        </p>
+        <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
+          <span className="font-mono uppercase tracking-wider text-muted-foreground/70">
+            primary kpi
+          </span>
+          <span className="font-mono text-foreground/90">{primaryKpi}</span>
+        </div>
       )}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Variant</TableHead>
-            <TableHead className="text-right">n</TableHead>
-            <TableHead className="text-right">conv</TableHead>
-            <TableHead className="text-right">rate</TableHead>
-            <TableHead className="text-right">lift</TableHead>
-            <TableHead className="text-right">p(best)</TableHead>
-            <TableHead>Verdict</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {variants.map((v) => {
-            const isWinner = winningVariant === v.variant_key;
-            const tone = rowTone(v, isWinner);
-            const verdict = isWinner
-              ? "winner"
-              : v.verdict ?? (v.is_control ? "control" : "—");
+      <div className="overflow-hidden rounded-lg border border-border bg-surface-2/30">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Variant</TableHead>
+              <TableHead className="text-right">n</TableHead>
+              <TableHead className="text-right">conv</TableHead>
+              <TableHead className="text-right">rate</TableHead>
+              <TableHead className="text-right">lift</TableHead>
+              <TableHead className="text-right">p(best)</TableHead>
+              <TableHead>Verdict</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {variants.map((v) => {
+              const isWinner = winningVariant === v.variant_key;
+              const tone = rowTone(v, isWinner);
+              const lift = ppLift(v, control);
+              const verdict = isWinner
+                ? "winner"
+                : v.verdict ?? (v.is_control ? "control" : "—");
 
-            return (
-              <TableRow key={v.variant_key} className={tone.row}>
-                <TableCell className="font-mono text-xs">
-                  {v.variant_key}
-                  {v.is_control && (
-                    <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">
-                      control
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {v.n ?? "—"}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {v.conv ?? "—"}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {pct(v.rate)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {ppLift(v, control)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {pBest(v)}
-                </TableCell>
-                <TableCell>
-                  <span
+              return (
+                <TableRow key={v.variant_key} className={ROW_TONE[tone]}>
+                  <TableCell className="font-mono text-[12px] text-foreground">
+                    <div className="flex items-center gap-2">
+                      <span>{v.variant_key}</span>
+                      {v.is_control && (
+                        <span className="rounded-md border border-info/20 bg-info-soft px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider text-info">
+                          control
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums text-[12.5px] text-foreground/90">
+                    {v.n ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums text-[12.5px] text-foreground/90">
+                    {v.conv ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums text-[12.5px] text-foreground">
+                    {pct(v.rate)}
+                  </TableCell>
+                  <TableCell
                     className={cn(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-inset",
-                      tone.verdict
+                      "text-right font-mono tabular-nums text-[12.5px]",
+                      lift.positive === true && "text-success",
+                      lift.positive === false && "text-danger",
+                      lift.positive === null && "text-muted-foreground/60"
                     )}
                   >
-                    {verdict}
-                  </span>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+                    {lift.text}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums text-[12.5px] text-foreground/90">
+                    {pBest(v)}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider",
+                        VERDICT_TONE[tone]
+                      )}
+                    >
+                      {verdict}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

@@ -1,18 +1,18 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { ArrowRight, Brain, CheckCircle2, Loader2, Sparkles } from "lucide-react";
-import { toast } from "sonner";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  ArrowRight,
+  ArrowUp,
+  Brain,
+  Check,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import {
   type BriefResponse,
@@ -28,6 +28,13 @@ const LOADING_STEPS = [
 const STEP_INTERVAL_MS = 1100;
 
 type Phase = "input" | "thinking" | "review";
+
+const PROMPT_SUGGESTIONS = [
+  "Mejorar la conversión del carrito",
+  "Reducir churn en los primeros 30 días",
+  "Subir el AOV en mid-tier",
+  "Aumentar el activation rate del nuevo onboarding",
+];
 
 export function NewExperimentForm({ orgSlug }: { orgSlug: string }) {
   const [brief, setBrief] = useState("");
@@ -98,87 +105,172 @@ export function NewExperimentForm({ orgSlug }: { orgSlug: string }) {
   };
 
   return (
-    <Card className="mx-auto w-full max-w-[600px]">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-muted-foreground" />
-          <CardTitle>¿Qué problema querés que Helix resuelva?</CardTitle>
+    <div className="mx-auto w-full max-w-[720px]">
+      {phase === "input" && (
+        <InputPhase
+          brief={brief}
+          setBrief={setBrief}
+          briefError={briefError}
+          canSubmit={canSubmit}
+          onSubmit={() => submitBrief(trimmed)}
+        />
+      )}
+
+      {phase === "thinking" && (
+        <ThinkingPhase completedSteps={completedSteps} />
+      )}
+
+      {phase === "review" && briefResult && (
+        <ReviewPanel
+          briefResult={briefResult}
+          onClarification={handleClarificationPick}
+          onConfirm={handleConfirm}
+          onReset={handleReset}
+          isConfirming={isConfirming}
+        />
+      )}
+    </div>
+  );
+}
+
+function InputPhase({
+  brief,
+  setBrief,
+  briefError,
+  canSubmit,
+  onSubmit,
+}: {
+  brief: string;
+  setBrief: (v: string) => void;
+  briefError: string | null;
+  canSubmit: boolean;
+  onSubmit: () => void;
+}) {
+  return (
+    <form
+      action={onSubmit}
+      className="space-y-5"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canSubmit) {
+          e.preventDefault();
+          onSubmit();
+        }
+      }}
+    >
+      {/* Chat-style input — large, breathable, AI-native. */}
+      <div className="relative rounded-xl border border-border-strong bg-surface-2/60 p-1 shadow-card transition-colors focus-within:border-accent/40">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+          <span className="flex h-5 w-5 items-center justify-center rounded-md bg-accent-soft text-accent">
+            <Sparkles className="h-3 w-3" strokeWidth={2} />
+          </span>
+          <span className="text-[12.5px] font-medium text-foreground">
+            ¿Qué problema querés que Helix resuelva?
+          </span>
+          <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
+            brief agent
+          </span>
         </div>
-        <CardDescription>
-          Describe la oportunidad en lenguaje natural. El Brief Agent va a
-          interpretarla, identificar el KPI primario y proponer guardrails.
-        </CardDescription>
-      </CardHeader>
 
-      <CardContent className="space-y-5">
-        {phase === "input" && (
-          <form
-            action={() => submitBrief(trimmed)}
-            className="space-y-4"
-          >
-            <Textarea
-              name="brief"
-              value={brief}
-              onChange={(e) => setBrief(e.target.value)}
-              placeholder={
-                "Ej: Mejorar la conversión del carrito · Reducir el churn de usuarios pago en sus primeros 30 días · Subir el AOV en mid-tier"
-              }
-              className="min-h-[140px] text-base"
-              disabled={isPending}
-            />
-            {briefError && (
-              <p className="text-xs text-destructive">{briefError}</p>
-            )}
-            <div className="flex justify-end">
-              <Button type="submit" disabled={!canSubmit}>
-                <Brain className="h-4 w-4" />
-                Pensar el experimento
-              </Button>
-            </div>
-          </form>
-        )}
+        <Textarea
+          name="brief"
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
+          placeholder="Ej: Reducir el churn de usuarios pago en sus primeros 30 días — sospecho que la onboarding de pago no comunica bien el valor."
+          className="min-h-[160px] resize-none border-0 bg-transparent text-[14px] leading-relaxed shadow-none focus-visible:ring-0"
+        />
 
-        {phase === "thinking" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              Helix está leyendo tu producto...
-            </div>
-            <ul className="space-y-2">
-              {LOADING_STEPS.map((step, idx) => {
-                const done = idx < completedSteps;
-                return (
-                  <li
-                    key={step}
-                    className={cn(
-                      "flex items-center gap-2 text-sm transition-colors",
-                      done ? "text-foreground" : "text-muted-foreground"
-                    )}
-                  >
-                    {done ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    )}
-                    {step}
-                  </li>
-                );
-              })}
-            </ul>
+        <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5">
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Kbd>⌘</Kbd>
+            <Kbd>↵</Kbd>
+            <span>para enviar</span>
           </div>
-        )}
+          <Button
+            type="submit"
+            size="sm"
+            variant="accent"
+            disabled={!canSubmit}
+          >
+            <Brain className="h-3 w-3" strokeWidth={2} />
+            Pensar el experimento
+            <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
+          </Button>
+        </div>
+      </div>
 
-        {phase === "review" && briefResult && (
-          <ReviewPanel
-            briefResult={briefResult}
-            onClarification={handleClarificationPick}
-            onConfirm={handleConfirm}
-            onReset={handleReset}
-            isConfirming={isConfirming}
-          />
-        )}
-      </CardContent>
-    </Card>
+      {briefError && (
+        <p className="rounded-md border border-danger/15 bg-danger-soft px-3 py-2 text-[12px] text-danger">
+          {briefError}
+        </p>
+      )}
+
+      {/* Suggestion chips. */}
+      <div className="space-y-2.5">
+        <p className="font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground/70">
+          Sugerencias
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {PROMPT_SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setBrief(s)}
+              className="press-feedback inline-flex h-7 items-center rounded-md border border-border bg-surface-2/40 px-2.5 text-[12px] text-muted-foreground-strong transition-colors hover:border-border-strong hover:bg-surface-3/60 hover:text-foreground"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function ThinkingPhase({ completedSteps }: { completedSteps: number }) {
+  return (
+    <div className="space-y-5 rounded-xl border border-border bg-surface-2/40 p-6">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent-soft text-accent">
+          <Sparkles className="h-3 w-3 animate-pulse" strokeWidth={2} />
+        </span>
+        <span className="text-[14px] font-medium text-foreground caret-blink">
+          Helix está leyendo tu producto
+        </span>
+      </div>
+      <ul className="space-y-2">
+        {LOADING_STEPS.map((step, idx) => {
+          const done = idx < completedSteps;
+          const active = idx === completedSteps;
+          return (
+            <li
+              key={step}
+              className={cn(
+                "flex items-center gap-2.5 text-[13px] transition-colors",
+                done && "text-foreground",
+                active && "text-foreground",
+                !done && !active && "text-muted-foreground/70"
+              )}
+            >
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                {done ? (
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-success-soft text-success">
+                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                  </span>
+                ) : active ? (
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin text-accent"
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <span className="h-2 w-2 rounded-full border border-border-strong" />
+                )}
+              </span>
+              {step}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -196,26 +288,36 @@ function ReviewPanel({
   isConfirming: boolean;
 }) {
   const p = briefResult.interpreted_problem;
+  const confidence = (briefResult.confidence * 100).toFixed(0);
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border bg-muted/30 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full border bg-background text-[10px] font-semibold">
+    <div className="space-y-5">
+      <div className="rounded-xl border border-border bg-surface-2/40 p-5 shadow-card">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface-3/60 font-mono text-[11px] text-muted-foreground-strong">
               1
             </span>
-            <span className="text-sm font-semibold">
-              ¿En qué trabajamos?
-            </span>
+            <div className="space-y-0.5">
+              <p className="text-[14px] font-medium tracking-tight text-foreground">
+                ¿En qué trabajamos?
+              </p>
+              <p className="font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground/70">
+                brief agent · interpretation
+              </p>
+            </div>
           </div>
-          <Badge variant="outline" className="font-normal">
-            confidence · {(briefResult.confidence * 100).toFixed(0)}%
-          </Badge>
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/15 bg-accent-soft px-1.5 py-0.5 font-mono text-[10.5px] text-accent">
+            <span className="h-1 w-1 rounded-full bg-current" />
+            {confidence}% confidence
+          </span>
         </div>
-        <p className="mt-3 text-sm">{p.description}</p>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+        <p className="mt-4 text-[13.5px] leading-relaxed text-foreground/90">
+          {p.description}
+        </p>
+
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-4 text-xs md:grid-cols-3">
           <Field label="Tipo">{p.type}</Field>
           <Field label="Superficie">{p.surface_area}</Field>
           <Field label="KPI primario">
@@ -240,40 +342,46 @@ function ReviewPanel({
       </div>
 
       {briefResult.notes && (
-        <p className="text-xs text-muted-foreground">{briefResult.notes}</p>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
+          {briefResult.notes}
+        </p>
       )}
 
       {briefResult.needs_clarification &&
       briefResult.clarification_options.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-sm font-medium">
+        <div className="space-y-3">
+          <p className="text-[13px] font-medium text-foreground">
             ¿A cuál de estas opciones te referís?
           </p>
           <div className="flex flex-col gap-2">
             {briefResult.clarification_options.map((option) => (
-              <Button
+              <button
                 key={option}
-                variant="outline"
-                size="lg"
-                className="h-auto justify-start whitespace-normal py-3 text-left"
+                type="button"
+                className="press-feedback group flex items-start gap-3 rounded-lg border border-border bg-surface-2/40 p-3.5 text-left text-[13px] text-foreground transition-colors hover:border-border-strong hover:bg-surface-3/40 disabled:opacity-50"
                 onClick={() => onClarification(option)}
                 disabled={isConfirming}
               >
-                {option}
-              </Button>
+                <span className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border border-border-strong group-hover:border-accent" />
+                <span className="flex-1">{option}</span>
+                <ArrowRight
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 -translate-x-1 text-muted-foreground/0 transition-all group-hover:translate-x-0 group-hover:text-foreground"
+                  strokeWidth={2}
+                />
+              </button>
             ))}
           </div>
         </div>
       ) : (
-        <div className="flex justify-between">
+        <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={onReset} disabled={isConfirming}>
             Volver
           </Button>
-          <Button onClick={onConfirm} disabled={isConfirming}>
+          <Button variant="accent" onClick={onConfirm} disabled={isConfirming}>
             {isConfirming ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
             ) : (
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
             )}
             Continuar a Lab
           </Button>
@@ -291,9 +399,11 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <dt className="uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5">{children}</dd>
+    <div className="space-y-1">
+      <dt className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground/70">
+        {label}
+      </dt>
+      <dd className="text-[12.5px] text-foreground/90">{children}</dd>
     </div>
   );
 }

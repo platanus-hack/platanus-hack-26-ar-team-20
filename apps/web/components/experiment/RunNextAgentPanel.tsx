@@ -59,7 +59,7 @@ export function RunNextAgentPanel({
       disabled={pendingAgent !== null}
       title="Reset the experiment back to a clean 'designing' state"
     >
-      <RefreshCcw className="h-3.5 w-3.5" />
+      <RefreshCcw className="h-3 w-3" strokeWidth={2} />
       Reset
     </Button>
   );

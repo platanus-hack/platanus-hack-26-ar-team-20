@@ -1,6 +1,10 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/*
+  Surface — premium dark card with hairline border, subtle inner edge,
+  no heavy shadow. Used sparingly: only when elevation has meaning.
+*/
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -8,7 +12,8 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-xl border bg-card text-card-foreground shadow-sm",
+      "rounded-xl border border-border bg-surface-2/60 text-foreground",
+      "shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.03),0_1px_2px_0_oklch(0_0_0_/_0.4)]",
       className
     )}
     {...props}
@@ -22,7 +27,7 @@ const CardHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    className={cn("flex flex-col space-y-1 px-5 pt-5", className)}
     {...props}
   />
 ));
@@ -34,7 +39,10 @@ const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("font-semibold leading-none tracking-tight", className)}
+    className={cn(
+      "text-[15px] font-medium leading-none tracking-tight text-foreground",
+      className
+    )}
     {...props}
   />
 ));
@@ -46,7 +54,7 @@ const CardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
+    className={cn("text-[13px] leading-relaxed text-muted-foreground", className)}
     {...props}
   />
 ));
@@ -56,7 +64,7 @@ const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+  <div ref={ref} className={cn("px-5 pb-5 pt-4", className)} {...props} />
 ));
 CardContent.displayName = "CardContent";
 
@@ -66,7 +74,10 @@ const CardFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex items-center p-6 pt-0", className)}
+    className={cn(
+      "flex items-center gap-2 border-t border-border px-5 py-3",
+      className
+    )}
     {...props}
   />
 ));

@@ -2,12 +2,32 @@ import { cn } from "@/lib/utils";
 
 type Tone = "success" | "warning" | "danger" | "info" | "muted";
 
-const TONE_CLASS: Record<Tone, string> = {
-  success: "bg-green-100 text-green-800 ring-green-200",
-  warning: "bg-yellow-100 text-yellow-800 ring-yellow-200",
-  danger: "bg-red-100 text-red-800 ring-red-200",
-  info: "bg-blue-100 text-blue-800 ring-blue-200",
-  muted: "bg-muted text-muted-foreground ring-border",
+const TONE_CLASS: Record<Tone, { wrap: string; dot: string; pulse: boolean }> = {
+  success: {
+    wrap: "border-success/15 bg-success-soft text-success",
+    dot: "bg-success",
+    pulse: false,
+  },
+  warning: {
+    wrap: "border-warning/15 bg-warning-soft text-warning",
+    dot: "bg-warning",
+    pulse: true,
+  },
+  danger: {
+    wrap: "border-danger/15 bg-danger-soft text-danger",
+    dot: "bg-danger",
+    pulse: false,
+  },
+  info: {
+    wrap: "border-info/15 bg-info-soft text-info",
+    dot: "bg-info",
+    pulse: true,
+  },
+  muted: {
+    wrap: "border-border bg-surface-2/60 text-muted-foreground-strong",
+    dot: "bg-muted-foreground/50",
+    pulse: false,
+  },
 };
 
 const STATUS_TONE: Record<string, Tone> = {
@@ -38,24 +58,23 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function StatusBadge({ status }: { status: string }) {
   const tone = STATUS_TONE[status] ?? "muted";
+  const t = TONE_CLASS[tone];
   const label = STATUS_LABEL[status] ?? status;
 
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-        TONE_CLASS[tone]
+        "inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium tracking-tight",
+        t.wrap
       )}
     >
       <span
         className={cn(
-          "mr-1.5 h-1.5 w-1.5 rounded-full",
-          tone === "success" && "bg-green-500",
-          tone === "warning" && "bg-yellow-500",
-          tone === "danger" && "bg-red-500",
-          tone === "info" && "bg-blue-500",
-          tone === "muted" && "bg-muted-foreground/40"
+          "h-1.5 w-1.5 shrink-0 rounded-full text-current",
+          t.dot,
+          t.pulse && "pulse-dot"
         )}
+        style={{ color: "currentColor" }}
       />
       {label}
     </span>

@@ -556,9 +556,7 @@ class WitnessAgent(BaseAgent):
                 "winning_variant": winning_variant,
                 "variant_verdicts": [v.model_dump() for v in verdicts],
                 "recommended_actions": recommended,
-                "narrative": (
-                    f"Veredicto determinístico (fallback): {experiment_verdict}."
-                ),
+                "narrative": "",
                 "confidence": 0.5,
             }
         )

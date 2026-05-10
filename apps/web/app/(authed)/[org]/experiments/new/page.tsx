@@ -8,16 +8,20 @@ export default async function NewExperimentPage({
   const { org } = await params;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 py-6">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">
+    <div className="space-y-10">
+      <header className="space-y-2">
+        <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground/70">
+          Brief agent
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
           Nuevo experimento
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="max-w-[600px] text-[13.5px] leading-relaxed text-muted-foreground">
           Helix interpreta el brief, propone un KPI primario y guardrails antes
-          de pasar al Lab.
+          de pasar al Lab. Escribí en lenguaje natural — el agente refina lo
+          que falta.
         </p>
-      </div>
+      </header>
 
       <NewExperimentForm orgSlug={org} />
     </div>

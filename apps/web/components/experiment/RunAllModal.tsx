@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CheckCircle2,
+  Check,
   Circle,
   ExternalLink,
   Github,
   Loader2,
   Sparkles,
-  XCircle,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -193,35 +193,29 @@ export function RunAllModal({
 
   const runFlow = async () => {
     try {
-      // 0. Reset — clean slate, restores the seed experiment to 'designing'.
       const reset = await execStep("reset", () => runDemoReset(orgPath));
       if (!reset) return abort();
 
-      // 1. Lab
       const lab = await execStep("lab", () =>
         runLab(experimentRowId, undefined, orgPath)
       );
       if (!lab) return abort();
 
-      // 2. Architect compose
       const compose = await execStep("compose", () =>
         runArchitectCompose(experimentRowId, orgPath)
       );
       if (!compose) return abort();
 
-      // 3. Fast-forward started_at
       const ff1 = await execStep("ff_started", () =>
         runFastForward(experimentSlug, orgPath)
       );
       if (!ff1) return abort();
 
-      // 4. Witness
       const witness = await execStep("witness", () =>
         runWitness(experimentSlug, orgPath)
       );
       if (!witness) return abort();
 
-      // 5. Director
       const director = await execStep("director", () =>
         runDirector(experimentSlug, orgPath)
       );
@@ -257,31 +251,51 @@ export function RunAllModal({
         if (!nextOpen) router.refresh();
       }}
     >
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4" />
-            Helix is running the full loop
-          </DialogTitle>
-          <DialogDescription>
-            Brief → Lab → Architect → Witness → Director → Consolidate. Tarda
-            ~30s con datos cacheados.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto p-0">
+        {/* Title block — premium top section. */}
+        <div className="space-y-4 border-b border-border px-6 pb-5 pt-6">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-soft text-accent">
+                <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />
+              </span>
+              <DialogTitle>Helix is running the full loop</DialogTitle>
+            </div>
+            <DialogDescription>
+              Brief → Lab → Architect → Witness → Director → Consolidate.
+              Tarda ~30s con datos cacheados.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span className="font-mono">
-            {(elapsedMs / 1000).toFixed(1)}s elapsed
-          </span>
-          {done && (
-            <span className="font-medium text-green-700">Loop completed ✓</span>
-          )}
-          {aborted && (
-            <span className="font-medium text-red-700">Loop aborted ✗</span>
-          )}
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[11.5px] tabular-nums text-muted-foreground">
+              {(elapsedMs / 1000).toFixed(1)}s elapsed
+            </span>
+            <span className="h-3 w-px bg-border" />
+            {done ? (
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-success/15 bg-success-soft px-1.5 py-0.5 text-[11px] font-medium text-success">
+                <Check className="h-3 w-3" strokeWidth={2.5} />
+                Loop completed
+              </span>
+            ) : aborted ? (
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-danger/15 bg-danger-soft px-1.5 py-0.5 text-[11px] font-medium text-danger">
+                <X className="h-3 w-3" strokeWidth={2.5} />
+                Loop aborted
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent">
+                <span className="relative h-1.5 w-1.5">
+                  <span className="absolute inset-0 rounded-full bg-current pulse-dot" />
+                  <span className="relative h-1.5 w-1.5 rounded-full bg-current" />
+                </span>
+                running
+              </span>
+            )}
+          </div>
         </div>
 
-        <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* Tool-execution timeline. */}
+        <ol className="divide-y divide-border">
           {STEPS.map((step) => {
             const r = results[step.key];
             const isCurrent = currentStep === step.key;
@@ -289,22 +303,33 @@ export function RunAllModal({
               <li
                 key={step.key}
                 className={cn(
-                  "rounded-md border p-3 transition-colors",
-                  isCurrent && "border-blue-300 bg-blue-50/50",
-                  r.status === "done" && "border-green-200 bg-green-50/40",
-                  r.status === "error" && "border-red-200 bg-red-50/40"
+                  "px-6 py-4 transition-colors",
+                  isCurrent && "bg-accent-soft/30",
+                  r.status === "done" && "bg-surface-2/30",
+                  r.status === "error" && "bg-danger-soft/20"
                 )}
               >
                 <div className="flex items-start gap-3">
                   <StatusIcon status={r.status} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-md border bg-background px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-2/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground-strong">
+                        <span className="h-1 w-1 rounded-full bg-accent" />
                         {step.agentLabel}
                       </span>
-                      <span className="text-sm font-medium">{step.title}</span>
+                      <span
+                        className={cn(
+                          "text-[13px] font-medium",
+                          isCurrent && "caret-blink",
+                          r.status === "done" && "text-foreground/90",
+                          r.status === "idle" && "text-muted-foreground/80",
+                          r.status === "error" && "text-danger"
+                        )}
+                      >
+                        {step.title}
+                      </span>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
                       {step.description}
                     </p>
                     {r.prUrl && (
@@ -312,16 +337,14 @@ export function RunAllModal({
                         href={r.prUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline"
+                        className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline"
                       >
                         Open PR
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     )}
                     {r.error && (
-                      <p className="mt-2 text-xs text-red-700">
-                        {r.error}
-                      </p>
+                      <p className="mt-2 text-[12px] text-danger">{r.error}</p>
                     )}
                   </div>
                 </div>
@@ -329,25 +352,31 @@ export function RunAllModal({
             );
           })}
           {done && (
-            <li className="rounded-md border border-blue-300 bg-blue-50/50 p-3">
+            <li className="bg-accent-soft/20 px-6 py-4">
               <div className="flex items-start gap-3">
-                <Github className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+                  <Github className="h-3 w-3" strokeWidth={2} />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-md border bg-background px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-2/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground-strong">
+                      <span className="h-1 w-1 rounded-full bg-accent" />
                       Helix
                     </span>
-                    <span className="text-sm font-medium">Esperando resultados</span>
+                    <span className="text-[13px] font-medium text-foreground">
+                      Esperando resultados
+                    </span>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Las feature flags están en producción. Witness analizará los resultados con Bayesian posteriors en los próximos 7 días.
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                    Las feature flags están en producción. Witness analizará los
+                    resultados con Bayesian posteriors en los próximos 7 días.
                   </p>
                   {results.compose.prUrl && (
                     <a
                       href={results.compose.prUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline"
+                      className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium text-accent hover:underline"
                     >
                       <Github className="h-3 w-3" />
                       Ver PR de feature flags
@@ -360,7 +389,8 @@ export function RunAllModal({
           )}
         </ol>
 
-        <div className="flex justify-end">
+        {/* Footer. */}
+        <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
           <Button
             variant={canClose ? "default" : "outline"}
             onClick={handleClose}
@@ -376,11 +406,27 @@ export function RunAllModal({
 
 function StatusIcon({ status }: { status: StepStatus }) {
   if (status === "running")
-    return <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-600" />;
+    return (
+      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" strokeWidth={2} />
+      </span>
+    );
   if (status === "done")
-    return <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />;
+    return (
+      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success-soft text-success">
+        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+      </span>
+    );
   if (status === "error")
-    return <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />;
-  return <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />;
+    return (
+      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-danger-soft text-danger">
+        <X className="h-2.5 w-2.5" strokeWidth={3} />
+      </span>
+    );
+  return (
+    <Circle
+      className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/40"
+      strokeWidth={1.5}
+    />
+  );
 }
-

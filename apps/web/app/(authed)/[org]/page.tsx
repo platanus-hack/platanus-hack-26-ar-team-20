@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Activity,
+  GitBranch,
+  GitPullRequest,
+  Sparkles,
+  TrendingUp,
+} from "lucide-react";
 import {
   Table,
   TableBody,
@@ -89,7 +88,6 @@ function liftPpFromResults(results: unknown): number {
   return (w - c) * 100;
 }
 
-
 export default async function OrgOverviewPage({
   params,
 }: {
@@ -170,7 +168,7 @@ export default async function OrgOverviewPage({
     prUrl: e.pr_url ?? null,
   }));
 
-  // Land the user on the demo experiment after a 5s "reading the repo"
+  // Land the user on the demo experiment after the 5s "reading the repo"
   // intro modal. The modal gates itself with sessionStorage so it only
   // shows once per browser session.
   const landingExperimentSlug =
@@ -180,96 +178,98 @@ export default async function OrgOverviewPage({
     DEMO_LANDING_EXPERIMENT_SLUG;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <WelcomeModal
         experimentSlug={landingExperimentSlug}
         orgSlug={orgSlug}
       />
-      <header className="flex items-center justify-between">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {org.name}
+
+      {/* Page header — Linear-quality. */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2">
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground/70">
+            Workspace overview
+          </p>
+          <h1 className="flex items-center gap-2.5 text-3xl font-semibold tracking-tight text-foreground">
+            <span>{org.name}</span>
+            <span aria-hidden role="img" className="text-[26px] leading-none">
+              🍌
+            </span>
           </h1>
-          <span className="text-muted-foreground">/</span>
-          <span className="text-muted-foreground">overview</span>
         </div>
-        <Badge variant="outline" className="font-normal">
-          {repoCount} {repoCount === 1 ? "repo" : "repos"} · {providerCount}{" "}
-          {providerCount === 1 ? "provider" : "providers"}
-        </Badge>
+        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+          <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface-2/40 px-2.5">
+            <GitBranch className="h-3 w-3" strokeWidth={2} />
+            <span className="font-mono tabular-nums">{repoCount}</span>
+            <span className="text-muted-foreground/70">
+              {repoCount === 1 ? "repo" : "repos"}
+            </span>
+          </span>
+          <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface-2/40 px-2.5">
+            <Sparkles className="h-3 w-3 text-accent" strokeWidth={2} />
+            <span className="font-mono tabular-nums">{providerCount}</span>
+            <span className="text-muted-foreground/70">
+              {providerCount === 1 ? "provider" : "providers"}
+            </span>
+          </span>
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Experimentos activos</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-semibold tabular-nums">
-              {activeCount}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              running · analyzing · shipped · consolidating
-            </p>
-          </CardContent>
-        </Card>
+      {/* KPI strip — divide-y, no card-spam. Per Taste rule 4. */}
+      <section
+        aria-label="Key metrics"
+        className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-3"
+      >
+        <Metric
+          label="Experimentos activos"
+          value={activeCount.toString()}
+          hint="running · analyzing · shipped · consolidating"
+          icon={Activity}
+          tone="info"
+        />
+        <Metric
+          label="Lift agregado · 30d"
+          value={`${aggLiftPp >= 0 ? "+" : ""}${aggLiftPp.toFixed(1)}`}
+          unit="pp"
+          hint="suma de winners shippeados"
+          icon={TrendingUp}
+          tone={aggLiftPp >= 0 ? "success" : "danger"}
+        />
+        <Metric
+          label="Features shipped · 30d"
+          value={shippedCount.toString()}
+          hint="winners en producción"
+          icon={GitPullRequest}
+          tone="accent"
+        />
+      </section>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Lift agregado 30d</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-semibold tabular-nums">
-              {aggLiftPp >= 0 ? "+" : ""}
-              {aggLiftPp.toFixed(1)}
-              <span className="text-base font-medium text-muted-foreground">
-                {" "}
-                pp
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              suma de winners shippeados
+      {/* Experiments table — premium, hairline-bordered. */}
+      <section className="space-y-4">
+        <div className="flex items-end justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-[15px] font-medium tracking-tight text-foreground">
+              Experiments
+            </h2>
+            <p className="text-[13px] text-muted-foreground">
+              Últimos 10 experimentos por fecha de inicio.
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Features shipped 30d</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-semibold tabular-nums">
-              {shippedCount}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              winners en producción últimos 30 días
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Experimentos</CardTitle>
-          <CardDescription>
-            Últimos 10 experimentos por fecha de inicio.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {tableRows.length === 0 ? (
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              No hay experimentos todavía.
-            </div>
-          ) : (
+        {tableRows.length === 0 ? (
+          <EmptyExperiments />
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-border bg-surface-2/40">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Experiment</TableHead>
+                  <TableHead className="w-[25%]">Experiment</TableHead>
                   <TableHead>Repo</TableHead>
-                  <TableHead>Variants</TableHead>
-                  <TableHead>Días live</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>PR</TableHead>
+                  <TableHead className="w-[80px]">Variants</TableHead>
+                  <TableHead className="w-[100px]">Live</TableHead>
+                  <TableHead className="w-[180px]">Status</TableHead>
+                  <TableHead className="w-[80px]">PR</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -282,10 +282,79 @@ export default async function OrgOverviewPage({
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
 
+type IconProp = typeof Activity;
+
+function Metric({
+  label,
+  value,
+  unit,
+  hint,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  hint: string;
+  icon: IconProp;
+  tone: "success" | "danger" | "info" | "accent";
+}) {
+  const toneClass =
+    tone === "success"
+      ? "text-success bg-success-soft"
+      : tone === "danger"
+        ? "text-danger bg-danger-soft"
+        : tone === "accent"
+          ? "text-accent bg-accent-soft"
+          : "text-info bg-info-soft";
+
+  return (
+    <div className="flex flex-col gap-3 bg-background p-6">
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`flex h-6 w-6 items-center justify-center rounded-md ${toneClass}`}
+        >
+          <Icon className="h-3 w-3" strokeWidth={2} />
+        </span>
+        <span className="text-[11.5px] font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-[32px] font-semibold leading-none tracking-tight tabular-nums text-foreground">
+          {value}
+        </span>
+        {unit && (
+          <span className="text-[14px] font-medium text-muted-foreground">
+            {unit}
+          </span>
+        )}
+      </div>
+      <p className="text-[12px] text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+function EmptyExperiments() {
+  return (
+    <div className="dot-bg flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-surface-2/30 px-6 py-16 text-center">
+      <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface-2 text-accent">
+        <Sparkles className="h-4 w-4" strokeWidth={2} />
+      </span>
+      <p className="text-[13.5px] font-medium text-foreground">
+        Sin experimentos todavía
+      </p>
+      <p className="max-w-[320px] text-[12.5px] text-muted-foreground">
+        Lanzá tu primer experimento desde un brief en lenguaje natural —
+        Helix interpreta, diseña y ejecuta el loop.
+      </p>
     </div>
   );
 }

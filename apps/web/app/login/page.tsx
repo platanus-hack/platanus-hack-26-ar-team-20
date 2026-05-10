@@ -1,16 +1,11 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
@@ -72,20 +67,41 @@ function LoginForm() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl">Sign in to Helix</CardTitle>
-          <CardDescription>
-            {mode === "password"
-              ? "Use your email and password."
-              : "We'll email you a one-time link."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-background px-6">
+      {/* Ambient grid backdrop. */}
+      <div
+        aria-hidden
+        className="grid-bg pointer-events-none fixed inset-0 -z-10 opacity-70"
+      />
+
+      <div className="w-full max-w-[400px] space-y-7">
+        {/* Brand — same mark as the favicon. */}
+        <div className="space-y-3 text-center">
+          <Image
+            src="/helix-brand-assets/png/app-icon-512.png"
+            alt="Helix"
+            width={44}
+            height={44}
+            priority
+            className="mx-auto h-11 w-11 rounded-lg"
+          />
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Sign in to Helix
+            </h1>
+            <p className="text-[13.5px] text-muted-foreground">
+              {mode === "password"
+                ? "Use your email and password to continue."
+                : "We'll email you a one-time link."}
+            </p>
+          </div>
+        </div>
+
+        {/* Card. */}
+        <div className="rounded-xl border border-border bg-surface-2/60 p-6 shadow-card backdrop-blur-md">
           {sent ? (
-            <div className="space-y-2 text-sm">
-              <p className="font-medium">Check your inbox.</p>
+            <div className="space-y-3 text-[13px]">
+              <p className="font-medium text-foreground">Check your inbox.</p>
               <p className="text-muted-foreground">
                 We sent a magic link to{" "}
                 <span className="font-medium text-foreground">{email}</span>.
@@ -93,7 +109,7 @@ function LoginForm() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="mt-2 px-0"
+                className="-ml-3"
                 onClick={() => {
                   setSent(false);
                   setMode("password");
@@ -103,12 +119,9 @@ function LoginForm() {
               </Button>
             </div>
           ) : mode === "password" ? (
-            <>
+            <div className="space-y-4">
               <form onSubmit={handlePassword} className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="email" className="text-sm font-medium">
-                    Email
-                  </label>
+                <Field label="Email" htmlFor="email">
                   <Input
                     id="email"
                     type="email"
@@ -119,11 +132,8 @@ function LoginForm() {
                     autoComplete="email"
                     autoFocus
                   />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="password" className="text-sm font-medium">
-                    Password
-                  </label>
+                </Field>
+                <Field label="Password" htmlFor="password">
                   <Input
                     id="password"
                     type="password"
@@ -133,15 +143,18 @@ function LoginForm() {
                     required
                     autoComplete="current-password"
                   />
-                </div>
+                </Field>
                 <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : null}
                   {loading ? "Signing in..." : "Sign in"}
                 </Button>
               </form>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 py-1">
                 <div className="h-px flex-1 bg-border" />
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
                   o
                 </span>
                 <div className="h-px flex-1 bg-border" />
@@ -155,16 +168,13 @@ function LoginForm() {
               >
                 Use magic link
               </Button>
-            </>
+            </div>
           ) : (
-            <>
+            <div className="space-y-4">
               <form onSubmit={handleMagicLink} className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="email" className="text-sm font-medium">
-                    Email
-                  </label>
+                <Field label="Email" htmlFor="magic-email">
                   <Input
-                    id="email"
+                    id="magic-email"
                     type="email"
                     placeholder="you@company.com"
                     value={email}
@@ -173,8 +183,11 @@ function LoginForm() {
                     autoComplete="email"
                     autoFocus
                   />
-                </div>
+                </Field>
                 <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : null}
                   {loading ? "Sending..." : "Send magic link"}
                 </Button>
               </form>
@@ -187,11 +200,37 @@ function LoginForm() {
               >
                 Use password instead
               </Button>
-            </>
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        <p className="text-center font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground/60">
+          Self-driving feature flags · v0.1
+        </p>
+      </div>
       <Toaster />
+    </div>
+  );
+}
+
+function Field({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label
+        htmlFor={htmlFor}
+        className="block text-[12px] font-medium text-foreground"
+      >
+        {label}
+      </label>
+      {children}
     </div>
   );
 }

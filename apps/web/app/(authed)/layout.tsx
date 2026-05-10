@@ -40,14 +40,28 @@ export default async function AuthedLayout({
     .order("started_at", { ascending: false, nullsFirst: false })
     .limit(20);
 
-  const experiments = (sidebarExps ?? []) as { experiment_id: string; status: string }[];
+  const experiments = (sidebarExps ?? []) as {
+    experiment_id: string;
+    status: string;
+  }[];
 
   return (
-    <div className="flex h-screen">
-      <Sidebar org={org} experiments={experiments} />
-      <div className="flex flex-1 flex-col">
-        <Topbar user={userInfo} org={org} />
-        <main className="flex-1 overflow-auto bg-muted/30 p-6">{children}</main>
+    <div className="relative flex h-screen overflow-hidden bg-background">
+      {/* Ambient grid backdrop — subtle, masked, never noisy. */}
+      <div
+        aria-hidden
+        className="grid-bg pointer-events-none fixed inset-0 -z-10 opacity-60"
+      />
+
+      <Sidebar org={org} user={userInfo} experiments={experiments} />
+
+      <div className="flex flex-1 flex-col min-w-0">
+        <Topbar org={org} />
+        <main className="flex-1 overflow-auto">
+          <div className="mx-auto w-full max-w-[1280px] px-6 py-8 lg:px-10">
+            {children}
+          </div>
+        </main>
       </div>
       <Toaster />
     </div>
