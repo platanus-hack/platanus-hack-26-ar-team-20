@@ -6,8 +6,8 @@ import {
   CheckCircle2,
   Circle,
   ExternalLink,
+  Github,
   Loader2,
-  Rocket,
   Sparkles,
   XCircle,
 } from "lucide-react";
@@ -328,23 +328,37 @@ export function RunAllModal({
               </li>
             );
           })}
+          {done && (
+            <li className="rounded-md border border-blue-300 bg-blue-50/50 p-3">
+              <div className="flex items-start gap-3">
+                <Github className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-md border bg-background px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Helix
+                    </span>
+                    <span className="text-sm font-medium">Esperando resultados</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Las feature flags están en producción. Witness analizará los resultados con Bayesian posteriors en los próximos 7 días.
+                  </p>
+                  {results.compose.prUrl && (
+                    <a
+                      href={results.compose.prUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline"
+                    >
+                      <Github className="h-3 w-3" />
+                      Ver PR de feature flags
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </li>
+          )}
         </ol>
-
-        {done && (
-          <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50/70 p-4">
-            <Rocket className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-blue-900">
-                Tus feature flags ya están en producción.
-              </p>
-              <p className="text-xs leading-relaxed text-blue-800">
-                El experimento queda corriendo con el winner al 100% de tráfico.
-                En 7 días vas a tener los primeros resultados de Witness con
-                Bayesian posteriors y guardrails consolidados.
-              </p>
-            </div>
-          </div>
-        )}
 
         <div className="flex justify-end">
           <Button

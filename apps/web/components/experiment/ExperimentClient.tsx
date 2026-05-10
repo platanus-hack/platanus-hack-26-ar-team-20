@@ -301,19 +301,6 @@ export function ExperimentClient(props: ExperimentClientProps) {
         )}
       </ExperimentCard>
 
-      <ExperimentCard
-        step={5}
-        agent="director + architect"
-        title="Decisión + cleanup"
-        description="Acción del Director y PR de consolidate del Architect."
-        empty={initialDecisions.length === 0 && initialConsolidateRuns.length === 0}
-        emptyHint="Sin decisiones ni cleanup. Run Director cuando haya results."
-      >
-        <DecisionsAndCleanup
-          decisions={initialDecisions}
-          consolidateRuns={initialConsolidateRuns}
-        />
-      </ExperimentCard>
     </div>
   );
 }
