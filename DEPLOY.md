@@ -19,8 +19,11 @@ end-to-end con `bash infra/verify-demo.sh`.
 
 2. En **Project Settings → API** copiá:
    - `Project URL` → `SUPABASE_URL` (también `NEXT_PUBLIC_SUPABASE_URL`)
-   - `anon` public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` secret key → `SUPABASE_SERVICE_ROLE_KEY` (server-only)
+   - **publishable** key (`sb_publishable_*`, ex-`anon`) → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **secret** key (`sb_secret_*`, ex-`service_role`) → `SUPABASE_SERVICE_ROLE_KEY` (server-only)
+
+   Supabase renombró las keys; los valores son intercambiables con los
+   nombres viejos, así que las variables de entorno se mantienen.
 
 3. Linkear el repo local al proyecto cloud:
 
