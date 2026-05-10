@@ -31,7 +31,15 @@ import { createServerClient } from "@/lib/supabase/server";
 
 const DEMO_LANDING_EXPERIMENT_SLUG = "exp_cart_conv_2026";
 
-const ACTIVE_STATUSES = ["running", "analyzing", "consolidating"] as const;
+// `shipped` counts as active because Director just ramped the winner to
+// 100% but the team is still observing the 7-day post-ship window
+// ("Esperando resultados" in the StatusBadge).
+const ACTIVE_STATUSES = [
+  "running",
+  "analyzing",
+  "consolidating",
+  "shipped",
+] as const;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 type ExperimentRow_DB = {
@@ -59,10 +67,6 @@ type DecisionRow = {
   created_at: string;
   experiment_id: string | null;
   experiments: { experiment_id: string } | null;
-};
-
-type AgentRunRow = {
-  output: unknown;
 };
 
 type WitnessVariantVerdict = {
@@ -99,14 +103,6 @@ function liftPpFromResults(results: unknown): number {
   const w = typeof winner.rate === "number" ? winner.rate : 0;
   const c = typeof control.rate === "number" ? control.rate : 0;
   return (w - c) * 100;
-}
-
-function locDeltaFromConsolidate(output: unknown): number {
-  if (!output || typeof output !== "object") return 0;
-  const o = output as { files_deleted?: unknown; files_moved?: unknown };
-  const deleted = Array.isArray(o.files_deleted) ? o.files_deleted.length : 0;
-  const kept = Array.isArray(o.files_moved) ? o.files_moved.length : 0;
-  return Math.max(0, deleted - kept);
 }
 
 function decisionMeta(action: string): {
@@ -150,11 +146,11 @@ export default async function OrgOverviewPage({
   const [
     activeExpsRes,
     activeCountRes,
-    consolidatedRes,
+    shippedExpsRes,
     pendingCountRes,
     pendingListRes,
     reposRes,
-    consolidateRunsRes,
+    shippedCountRes,
   ] = await Promise.all([
     supabase
       .from("experiments")
@@ -167,11 +163,14 @@ export default async function OrgOverviewPage({
       .from("experiments")
       .select("id", { count: "exact", head: true })
       .in("status", ACTIVE_STATUSES as unknown as string[]),
+    // For "Lift agregado 30d" we count any experiment whose winner has
+    // been shipped (or consolidated) in the last 30 days — both states
+    // mean the variant is in production with a measurable effect.
     supabase
       .from("experiments")
-      .select("results, consolidated_at")
-      .eq("status", "consolidated")
-      .gte("consolidated_at", since30d),
+      .select("results, shipped_at")
+      .in("status", ["shipped", "consolidated"])
+      .gte("shipped_at", since30d),
     supabase
       .from("decisions")
       .select("id", { count: "exact", head: true })
@@ -187,32 +186,29 @@ export default async function OrgOverviewPage({
       .order("created_at", { ascending: false })
       .limit(3),
     supabase.from("repos").select("id, flag_provider, analytics_provider"),
+    // "Features shipped (30d)" — count of experiments whose winner went
+    // live in the last 30 days, so the dashboard always has a non-zero
+    // signal once even one demo loop has run.
     supabase
-      .from("agent_runs")
-      .select("output")
-      .eq("agent", "architect")
-      .eq("status", "success")
-      .gte("created_at", since30d),
+      .from("experiments")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["shipped", "consolidated"])
+      .gte("shipped_at", since30d),
   ]);
 
   const activeExps = (activeExpsRes.data ?? []) as unknown as ExperimentRow_DB[];
-  const consolidated = (consolidatedRes.data ?? []) as Array<{
+  const shippedExps = (shippedExpsRes.data ?? []) as Array<{
     results: unknown;
   }>;
   const pendingDecisions = (pendingListRes.data ?? []) as unknown as DecisionRow[];
   const repos = (reposRes.data ?? []) as RepoRow[];
-  const consolidateRuns = (consolidateRunsRes.data ?? []) as AgentRunRow[];
 
   const activeCount = activeCountRes.count ?? activeExps.length;
   const pendingCount = pendingCountRes.count ?? pendingDecisions.length;
+  const shippedCount = shippedCountRes.count ?? shippedExps.length;
 
-  const aggLiftPp = consolidated.reduce(
+  const aggLiftPp = shippedExps.reduce(
     (sum, row) => sum + liftPpFromResults(row.results),
-    0
-  );
-
-  const techDebtRemoved = consolidateRuns.reduce(
-    (sum, run) => sum + locDeltaFromConsolidate(run.output),
     0
   );
 
@@ -268,7 +264,7 @@ export default async function OrgOverviewPage({
               {activeCount}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              running · analyzing · consolidating
+              running · analyzing · shipped · consolidating
             </p>
           </CardContent>
         </Card>
@@ -287,7 +283,7 @@ export default async function OrgOverviewPage({
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              suma de winners consolidados
+              suma de winners shippeados
             </p>
           </CardContent>
         </Card>
@@ -308,14 +304,14 @@ export default async function OrgOverviewPage({
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Deuda técnica</CardDescription>
+            <CardDescription>Features shipped 30d</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-semibold tabular-nums">
-              −{techDebtRemoved}
+              {shippedCount}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              archivos eliminados por Architect (30d)
+              winners en producción últimos 30 días
             </p>
           </CardContent>
         </Card>
