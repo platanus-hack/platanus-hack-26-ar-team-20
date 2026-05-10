@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 
 const API_URL = process.env.HELIX_API_URL ?? "http://localhost:8000";
+const API_INTERNAL_TOKEN = process.env.HELIX_API_INTERNAL_TOKEN;
 
 export type AgentName =
   | "brief"
@@ -24,9 +25,16 @@ async function postJson(
   body?: unknown
 ): Promise<AgentActionResult> {
   try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (API_INTERNAL_TOKEN) {
+      headers.Authorization = `Bearer ${API_INTERNAL_TOKEN}`;
+    }
+
     const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: body === undefined ? "{}" : JSON.stringify(body),
       cache: "no-store",
     });
