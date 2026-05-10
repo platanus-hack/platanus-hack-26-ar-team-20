@@ -1,4 +1,12 @@
 import { Bot } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 type Agent = {
   name: string;
@@ -87,45 +95,57 @@ export default function AgentsPage() {
         </div>
       </header>
 
-      {/* Agent grid — 2 cols on sm, 3 on lg, 4 on xl. All 7 fit in 2
-          rows on a standard laptop without the videos shrinking. */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {AGENTS.map((agent) => (
-          <AgentCard key={agent.name} agent={agent} />
-        ))}
+      {/* Agents table — premium, hairline-bordered, mirrors the
+          dashboard's experiments table. Video sits in the first column at
+          a comfortable 16:9 size; the rest of the row is name + role +
+          description. All 7 agents fit without horizontal scroll. */}
+      <section className="overflow-hidden rounded-xl border border-border bg-surface-2/40">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[260px]">Demo</TableHead>
+              <TableHead className="w-[160px]">Agent</TableHead>
+              <TableHead className="w-[120px]">Role</TableHead>
+              <TableHead>Description</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {AGENTS.map((agent) => (
+              <TableRow key={agent.name} className="align-top">
+                <TableCell className="py-3">
+                  <div className="aspect-video w-[228px] overflow-hidden rounded-lg border border-border bg-surface-3">
+                    <video
+                      src={agent.video}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="h-full w-full object-cover"
+                      aria-label={`${agent.name} agent demo`}
+                    />
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="text-[13.5px] font-medium tracking-tight text-foreground">
+                    {agent.name}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <span className="inline-flex items-center rounded-md border border-border bg-surface-3/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground-strong">
+                    {agent.role}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <p className="max-w-[58ch] text-[12.5px] leading-relaxed text-muted-foreground">
+                    {agent.description}
+                  </p>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </section>
     </div>
-  );
-}
-
-function AgentCard({ agent }: { agent: Agent }) {
-  return (
-    <article className="group flex flex-col overflow-hidden rounded-xl border border-border bg-surface-2/40 transition-colors hover:border-border-strong">
-      <div className="relative aspect-video overflow-hidden bg-surface-3">
-        <video
-          src={agent.video}
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          className="h-full w-full object-cover"
-          aria-label={`${agent.name} agent demo`}
-        />
-      </div>
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-[14.5px] font-medium tracking-tight text-foreground">
-            {agent.name}
-          </h2>
-          <span className="rounded-md border border-border bg-surface-3/60 px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider text-muted-foreground-strong">
-            {agent.role}
-          </span>
-        </div>
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-          {agent.description}
-        </p>
-      </div>
-    </article>
   );
 }

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
-  Circle,
   ExternalLink,
   Github,
   Loader2,
@@ -30,6 +29,8 @@ import {
   runWitness,
 } from "@/lib/agent-actions";
 
+// All internal step keys, including silent demo plumbing (reset / ff_started)
+// that runs without its own panel. The user only sees the four agent panels.
 type StepKey =
   | "reset"
   | "lab"
@@ -38,65 +39,61 @@ type StepKey =
   | "witness"
   | "director";
 
-type StepStatus = "idle" | "running" | "done" | "error" | "skipped";
+type VisibleStepKey = "lab" | "compose" | "witness" | "director";
 
-type StepConfig = {
-  key: StepKey;
+type StepStatus = "idle" | "running" | "done" | "error";
+
+type VisibleStepConfig = {
+  key: VisibleStepKey;
   agentLabel: string;
+  video: string;
   title: string;
   description: string;
 };
 
-const STEPS: StepConfig[] = [
-  {
-    key: "reset",
-    agentLabel: "Helix",
-    title: "Resetting experiment state",
-    description:
-      "Limpia agent_runs, decisions y restaura el experimento al estado 'designing' inicial.",
-  },
+const VISIBLE_STEPS: VisibleStepConfig[] = [
   {
     key: "lab",
     agentLabel: "Lab",
-    title: "Lab is designing variants",
+    video: "/videos/Lab.mp4",
+    title: "Lab está diseñando las variantes",
     description:
-      "Diseñando 4 variantes (recall · cross_sell · urgency) + control con tráfico 25/25/25/25.",
+      "Genera 4 variantes (recall · cross_sell · urgency) + control con tráfico 25/25/25/25 y un decision rule bayesiano frozen.",
   },
   {
     key: "compose",
     agentLabel: "Architect",
-    title: "Architect is composing the multivariate PR",
+    video: "/videos/Architect.mp4",
+    title: "Architect está componiendo el PR",
     description:
-      "Abriendo PR en JoaquinGiorgis/helix-demo-saas y creando feature flag multivariante en PostHog.",
-  },
-  {
-    key: "ff_started",
-    agentLabel: "Helix",
-    title: "Fast-forwarding observation window",
-    description:
-      "Comprimo 7 días de tráfico para que Witness vea la muestra al instante.",
+      "Abre el PR en JoaquinGiorgis/helix-demo-saas con las 4 variantes detrás de un solo feature flag multivariante en PostHog.",
   },
   {
     key: "witness",
     agentLabel: "Witness",
-    title: "Witness is computing posteriors",
+    video: "/videos/Witness.mp4",
+    title: "Witness está computando posteriors",
     description:
-      "Bayesian Thompson sampling sobre cada arm + check de guardrails (refund, support, AOV).",
+      "Bayesian Thompson sampling sobre cada arm + check de guardrails (refund, support, AOV) para emitir un veredicto por variante.",
   },
   {
     key: "director",
     agentLabel: "Director",
-    title: "Director is applying policy",
+    video: "/videos/Director.mp4",
+    title: "Director está aplicando la policy",
     description:
-      "Ejecutando ship_winner contra PostHog (winner a 100%, perdedoras a 0%) y registrando la decisión.",
+      "Ejecuta ship_winner contra PostHog: rampea el winner a 100%, las perdedoras a 0% y registra la decisión auditable.",
   },
 ];
 
-type StepResult = {
-  status: StepStatus;
-  prUrl?: string | null;
-  error?: string | null;
+// Silent steps map to the next visible step's "running" panel — so the user
+// sees Witness pre-running while ff_started compresses time, etc.
+const SILENT_STEP_FORWARDS: Record<"reset" | "ff_started", VisibleStepKey> = {
+  reset: "lab",
+  ff_started: "witness",
 };
+
+type StepResult = { status: StepStatus; prUrl?: string | null; error?: string | null };
 
 type RunAllModalProps = {
   experimentRowId: string;
@@ -120,13 +117,17 @@ export function RunAllModal({
   onOpenChange,
 }: RunAllModalProps) {
   const router = useRouter();
-  const [results, setResults] = useState<Record<StepKey, StepResult>>(
+
+  const [results, setResults] = useState<Record<VisibleStepKey, StepResult>>(
     () =>
       Object.fromEntries(
-        STEPS.map((s) => [s.key, { status: "idle" } as StepResult])
-      ) as Record<StepKey, StepResult>
+        VISIBLE_STEPS.map((s) => [s.key, { status: "idle" } as StepResult])
+      ) as Record<VisibleStepKey, StepResult>
   );
-  const [currentStep, setCurrentStep] = useState<StepKey | null>(null);
+  const [currentVisible, setCurrentVisible] = useState<VisibleStepKey>(
+    VISIBLE_STEPS[0].key
+  );
+  const [composePrUrl, setComposePrUrl] = useState<string | null>(null);
   const [aborted, setAborted] = useState(false);
   const [done, setDone] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -145,10 +146,11 @@ export function RunAllModal({
 
     setResults(
       Object.fromEntries(
-        STEPS.map((s) => [s.key, { status: "idle" } as StepResult])
-      ) as Record<StepKey, StepResult>
+        VISIBLE_STEPS.map((s) => [s.key, { status: "idle" } as StepResult])
+      ) as Record<VisibleStepKey, StepResult>
     );
-    setCurrentStep(null);
+    setCurrentVisible(VISIBLE_STEPS[0].key);
+    setComposePrUrl(null);
     setAborted(false);
     setDone(false);
     setElapsedMs(0);
@@ -169,59 +171,89 @@ export function RunAllModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const setStep = (key: StepKey, patch: Partial<StepResult>) =>
+  const setVisibleResult = (key: VisibleStepKey, patch: Partial<StepResult>) =>
     setResults((prev) => ({
       ...prev,
       [key]: { ...prev[key], ...patch },
     }));
 
-  const execStep = async <T,>(
+  // Run any step (visible or silent). Visible steps surface their state in
+  // the UI; silent ones forward to the next visible step's "running" panel
+  // so the modal never goes blank between agents.
+  const execStep = async (
     key: StepKey,
     runner: () => Promise<AgentActionResult>
-  ): Promise<T | null> => {
-    setCurrentStep(key);
-    setStep(key, { status: "running", error: null });
+  ): Promise<unknown | null> => {
+    const target: VisibleStepKey =
+      key in SILENT_STEP_FORWARDS
+        ? SILENT_STEP_FORWARDS[key as "reset" | "ff_started"]
+        : (key as VisibleStepKey);
+
+    setCurrentVisible(target);
+    if (!(key in SILENT_STEP_FORWARDS)) {
+      setVisibleResult(target, { status: "running", error: null });
+    } else {
+      // Silent: keep the next visible step in "running" appearance so the
+      // agent video is on screen while plumbing finishes.
+      setVisibleResult(target, { status: "running", error: null });
+    }
+
     const result = await runner();
     if (!result.ok) {
-      setStep(key, { status: "error", error: result.error });
+      // Surface the error on the visible target step.
+      setVisibleResult(target, { status: "error", error: result.error });
       return null;
     }
-    const prUrl = extractPrUrl(result.data);
-    setStep(key, { status: "done", prUrl, error: null });
-    return result.data as T;
+
+    if (!(key in SILENT_STEP_FORWARDS)) {
+      const prUrl = extractPrUrl(result.data);
+      setVisibleResult(target, { status: "done", prUrl, error: null });
+      if (key === "compose" && prUrl) setComposePrUrl(prUrl);
+    }
+    return result.data;
   };
 
   const runFlow = async () => {
     try {
-      const reset = await execStep("reset", () => runDemoReset(orgPath));
-      if (!reset) return abort();
+      // Silent: reset → folds into Lab's running panel.
+      if (!(await execStep("reset", () => runDemoReset(orgPath)))) return abort();
 
-      const lab = await execStep("lab", () =>
-        runLab(experimentRowId, undefined, orgPath)
-      );
-      if (!lab) return abort();
+      if (
+        !(await execStep("lab", () =>
+          runLab(experimentRowId, undefined, orgPath)
+        ))
+      )
+        return abort();
 
-      const compose = await execStep("compose", () =>
-        runArchitectCompose(experimentRowId, orgPath)
-      );
-      if (!compose) return abort();
+      if (
+        !(await execStep("compose", () =>
+          runArchitectCompose(experimentRowId, orgPath)
+        ))
+      )
+        return abort();
 
-      const ff1 = await execStep("ff_started", () =>
-        runFastForward(experimentSlug, orgPath)
-      );
-      if (!ff1) return abort();
+      // Silent: ff_started → folds into Witness's running panel.
+      if (
+        !(await execStep("ff_started", () =>
+          runFastForward(experimentSlug, orgPath)
+        ))
+      )
+        return abort();
 
-      const witness = await execStep("witness", () =>
-        runWitness(experimentSlug, orgPath)
-      );
-      if (!witness) return abort();
+      if (
+        !(await execStep("witness", () =>
+          runWitness(experimentSlug, orgPath)
+        ))
+      )
+        return abort();
 
-      const director = await execStep("director", () =>
-        runDirector(experimentSlug, orgPath)
-      );
-      if (!director) return abort();
+      if (
+        !(await execStep("director", () =>
+          runDirector(experimentSlug, orgPath)
+        ))
+      )
+        return abort();
 
-      setCurrentStep(null);
       setDone(true);
       router.refresh();
     } finally {
@@ -231,7 +263,6 @@ export function RunAllModal({
 
   const abort = () => {
     setAborted(true);
-    setCurrentStep(null);
     if (tickerRef.current) clearInterval(tickerRef.current);
   };
 
@@ -241,6 +272,9 @@ export function RunAllModal({
   };
 
   const canClose = done || aborted;
+  const currentConfig = VISIBLE_STEPS.find((s) => s.key === currentVisible)!;
+  const currentResult = results[currentVisible];
+  const currentIndex = VISIBLE_STEPS.findIndex((s) => s.key === currentVisible);
 
   return (
     <Dialog
@@ -251,182 +285,201 @@ export function RunAllModal({
         if (!nextOpen) router.refresh();
       }}
     >
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto p-0">
-        {/* Title block — premium top section. */}
-        <div className="space-y-4 border-b border-border px-6 pb-5 pt-6">
-          <DialogHeader>
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-soft text-accent">
-                <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />
+      <DialogContent className="max-w-lg gap-0 p-0 [&>button]:hidden overflow-hidden">
+        {/* Header — compact, single-line. */}
+        <div className="flex items-start justify-between gap-3 border-b border-border px-5 pb-4 pt-5">
+          <DialogHeader className="space-y-1.5 text-left">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent-soft text-accent">
+                <Sparkles className="h-3 w-3" strokeWidth={2} />
               </span>
-              <DialogTitle>Helix is running the full loop</DialogTitle>
+              <DialogTitle className="text-[14px] font-medium tracking-tight">
+                Helix está corriendo el loop
+              </DialogTitle>
             </div>
-            <DialogDescription>
-              Brief → Lab → Architect → Witness → Director → Consolidate.
-              Tarda ~30s con datos cacheados.
+            <DialogDescription className="text-[12px] leading-relaxed">
+              Lab → Architect → Witness → Director. Tarda ~30s con datos
+              cacheados.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-[11.5px] tabular-nums text-muted-foreground">
-              {(elapsedMs / 1000).toFixed(1)}s elapsed
-            </span>
-            <span className="h-3 w-px bg-border" />
-            {done ? (
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-success/15 bg-success-soft px-1.5 py-0.5 text-[11px] font-medium text-success">
-                <Check className="h-3 w-3" strokeWidth={2.5} />
-                Loop completed
-              </span>
-            ) : aborted ? (
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-danger/15 bg-danger-soft px-1.5 py-0.5 text-[11px] font-medium text-danger">
-                <X className="h-3 w-3" strokeWidth={2.5} />
-                Loop aborted
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent">
-                <span className="relative h-1.5 w-1.5">
-                  <span className="absolute inset-0 rounded-full bg-current pulse-dot" />
-                  <span className="relative h-1.5 w-1.5 rounded-full bg-current" />
-                </span>
-                running
-              </span>
-            )}
-          </div>
+          {canClose && (
+            <button
+              type="button"
+              onClick={handleClose}
+              className="rounded-md border border-border bg-surface-3/40 p-1 text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground"
+              aria-label="Cerrar"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={2} />
+            </button>
+          )}
         </div>
 
-        {/* Tool-execution timeline. */}
-        <ol className="divide-y divide-border">
-          {STEPS.map((step) => {
-            const r = results[step.key];
-            const isCurrent = currentStep === step.key;
-            return (
-              <li
-                key={step.key}
-                className={cn(
-                  "px-6 py-4 transition-colors",
-                  isCurrent && "bg-accent-soft/30",
-                  r.status === "done" && "bg-surface-2/30",
-                  r.status === "error" && "bg-danger-soft/20"
-                )}
-              >
-                <div className="flex items-start gap-3">
-                  <StatusIcon status={r.status} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-2/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground-strong">
-                        <span className="h-1 w-1 rounded-full bg-accent" />
-                        {step.agentLabel}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-[13px] font-medium",
-                          isCurrent && "caret-blink",
-                          r.status === "done" && "text-foreground/90",
-                          r.status === "idle" && "text-muted-foreground/80",
-                          r.status === "error" && "text-danger"
-                        )}
-                      >
-                        {step.title}
-                      </span>
-                    </div>
-                    <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                      {step.description}
-                    </p>
-                    {r.prUrl && (
-                      <a
-                        href={r.prUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline"
-                      >
-                        Open PR
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
-                    {r.error && (
-                      <p className="mt-2 text-[12px] text-danger">{r.error}</p>
-                    )}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-          {done && (
-            <li className="bg-accent-soft/20 px-6 py-4">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
-                  <Github className="h-3 w-3" strokeWidth={2} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-2/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground-strong">
-                      <span className="h-1 w-1 rounded-full bg-accent" />
-                      Helix
-                    </span>
-                    <span className="text-[13px] font-medium text-foreground">
-                      Esperando resultados
-                    </span>
-                  </div>
-                  <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                    Las feature flags están en producción. Witness analizará los
-                    resultados con Bayesian posteriors en los próximos 7 días.
-                  </p>
-                  {results.compose.prUrl && (
-                    <a
-                      href={results.compose.prUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium text-accent hover:underline"
-                    >
-                      <Github className="h-3 w-3" />
-                      Ver PR de feature flags
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            </li>
-          )}
-        </ol>
+        {/* Body — agent video + step description, OR final panel. */}
+        {done ? (
+          <FinalPanel prUrl={composePrUrl} />
+        ) : (
+          <ActiveStepPanel
+            config={currentConfig}
+            status={currentResult.status}
+            error={currentResult.error ?? null}
+          />
+        )}
 
-        {/* Footer. */}
-        <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
-          <Button
-            variant={canClose ? "default" : "outline"}
-            onClick={handleClose}
-            disabled={!canClose}
-          >
-            {canClose ? "Cerrar" : "Corriendo..."}
-          </Button>
+        {/* Footer — progress dots + elapsed time + close. */}
+        <div className="flex items-center justify-between gap-3 border-t border-border bg-surface-1/40 px-5 py-3">
+          <div className="flex items-center gap-2">
+            {VISIBLE_STEPS.map((s, idx) => {
+              const r = results[s.key];
+              const tone =
+                done && idx <= currentIndex
+                  ? "bg-success"
+                  : r.status === "done"
+                    ? "bg-success"
+                    : r.status === "running"
+                      ? "bg-accent pulse-dot"
+                      : r.status === "error"
+                        ? "bg-danger"
+                        : "bg-muted-foreground/30";
+              return (
+                <span
+                  key={s.key}
+                  className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tone)}
+                  title={s.agentLabel}
+                />
+              );
+            })}
+            <span className="ml-1 font-mono text-[10.5px] tabular-nums text-muted-foreground/80">
+              {done ? "loop completed" : `step ${currentIndex + 1} de ${VISIBLE_STEPS.length}`}
+            </span>
+          </div>
+          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+            {(elapsedMs / 1000).toFixed(1)}s
+          </span>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Active step panel — agent video + label + description. The video swaps
+// when currentVisible changes (key prop forces remount so autoplay restarts).
+// ---------------------------------------------------------------------------
+function ActiveStepPanel({
+  config,
+  status,
+  error,
+}: {
+  config: VisibleStepConfig;
+  status: StepStatus;
+  error: string | null;
+}) {
+  return (
+    <div className="space-y-4 px-5 py-5">
+      <div className="aspect-video overflow-hidden rounded-lg border border-border bg-surface-3">
+        <video
+          key={config.video}
+          src={config.video}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-cover"
+          aria-label={`${config.agentLabel} agent demo`}
+        />
+      </div>
+
+      <div className="space-y-2.5">
+        <div className="flex items-center gap-2">
+          <StatusIcon status={status} />
+          <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-2/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground-strong">
+            <span className="h-1 w-1 rounded-full bg-accent" />
+            {config.agentLabel}
+          </span>
+          <span
+            className={cn(
+              "text-[13.5px] font-medium tracking-tight",
+              status === "running" && "caret-blink text-foreground",
+              status === "done" && "text-foreground/90",
+              status === "error" && "text-danger",
+              status === "idle" && "text-muted-foreground"
+            )}
+          >
+            {config.title}
+          </span>
+        </div>
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+          {config.description}
+        </p>
+        {error && (
+          <p className="rounded-md border border-danger/15 bg-danger-soft px-2.5 py-1.5 text-[12px] text-danger">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Final panel — winner ramped, observation window starting.
+// ---------------------------------------------------------------------------
+function FinalPanel({ prUrl }: { prUrl: string | null }) {
+  return (
+    <div className="space-y-4 px-5 py-5">
+      <div className="flex items-start gap-3 rounded-lg border border-success/20 bg-success-soft/30 px-3.5 py-3">
+        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success-soft text-success">
+          <Check className="h-3 w-3" strokeWidth={3} />
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-[13px] font-medium text-foreground">
+            Esperando resultados
+          </p>
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            Las feature flags están en producción. Witness analizará los
+            resultados con Bayesian posteriors en los próximos 7 días.
+          </p>
+        </div>
+      </div>
+
+      {prUrl && (
+        <a
+          href={prUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-3/40 px-2.5 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:border-border-strong hover:bg-surface-3/60"
+        >
+          <Github className="h-3 w-3" strokeWidth={2} />
+          Ver PR de feature flags
+          <ExternalLink className="h-3 w-3 text-muted-foreground/70" />
+        </a>
+      )}
+    </div>
+  );
+}
+
 function StatusIcon({ status }: { status: StepStatus }) {
   if (status === "running")
     return (
-      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" strokeWidth={2} />
-      </span>
+      <Loader2
+        className="h-3.5 w-3.5 shrink-0 animate-spin text-accent"
+        strokeWidth={2}
+      />
     );
   if (status === "done")
     return (
-      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success-soft text-success">
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-success-soft text-success">
         <Check className="h-2.5 w-2.5" strokeWidth={3} />
       </span>
     );
   if (status === "error")
     return (
-      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-danger-soft text-danger">
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-danger-soft text-danger">
         <X className="h-2.5 w-2.5" strokeWidth={3} />
       </span>
     );
   return (
-    <Circle
-      className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/40"
-      strokeWidth={1.5}
-    />
+    <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border-strong" />
   );
 }
