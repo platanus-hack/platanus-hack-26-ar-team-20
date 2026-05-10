@@ -20,6 +20,7 @@ from agents.schemas import (
     WitnessOutput,
     WitnessRecommendedAction,
 )
+from core.config import settings
 from core.posthog_client import PostHogClient
 from core.supabase_client import filter_experiment
 
@@ -108,27 +109,50 @@ class DirectorAgent(BaseAgent):
                 summary_for_human="",
             )
 
-            try:
-                claude_output, t_in, t_out = await self._claude_summary(
-                    witness=witness,
-                    policy=policy,
-                    decisions=decisions,
-                    follow_ups=follow_ups,
-                    exp=exp,
-                )
-                tokens_in = t_in
-                tokens_out = t_out
-                if claude_output:
-                    output.summary_for_human = (
-                        claude_output.get("summary_for_human") or ""
+            # Demo fast path: skip the LLM-generated summary so Director
+            # returns in a few seconds instead of 15-20s. Decisions are
+            # already populated deterministically above.
+            if bool(getattr(settings, "helix_demo_mode", False)):
+                if decisions:
+                    winner_payload = next(
+                        (
+                            d.payload.get("winner")
+                            for d in decisions
+                            if d.action == "ship_winner"
+                        ),
+                        None,
                     )
-                    claude_decisions = claude_output.get("decisions") or []
-                    for orig, c in zip(output.decisions, claude_decisions, strict=False):
-                        if isinstance(c, dict) and c.get("rationale"):
-                            orig.rationale = c["rationale"]
-                            self._update_decision_rationale(orig)
-            except Exception:
-                pass
+                    if winner_payload:
+                        output.summary_for_human = (
+                            f"Ship winner '{winner_payload}' a 100%. "
+                            f"Resto de variantes apagadas. Cleanup PR scheduled."
+                        )
+                    else:
+                        output.summary_for_human = (
+                            "Acciones aplicadas según política. Ver decisiones."
+                        )
+            else:
+                try:
+                    claude_output, t_in, t_out = await self._claude_summary(
+                        witness=witness,
+                        policy=policy,
+                        decisions=decisions,
+                        follow_ups=follow_ups,
+                        exp=exp,
+                    )
+                    tokens_in = t_in
+                    tokens_out = t_out
+                    if claude_output:
+                        output.summary_for_human = (
+                            claude_output.get("summary_for_human") or ""
+                        )
+                        claude_decisions = claude_output.get("decisions") or []
+                        for orig, c in zip(output.decisions, claude_decisions, strict=False):
+                            if isinstance(c, dict) and c.get("rationale"):
+                                orig.rationale = c["rationale"]
+                                self._update_decision_rationale(orig)
+                except Exception:
+                    pass
 
             await self._audit(
                 org_id=org_id,

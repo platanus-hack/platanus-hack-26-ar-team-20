@@ -200,51 +200,49 @@ export function ExperimentClient(props: ExperimentClientProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h1 className="font-mono text-2xl font-semibold tracking-tight">
-              {experimentSlug}
-            </h1>
-            <StatusBadge status={status} />
-          </div>
-          {problem?.description && (
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              {problem.description}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2 pt-1 text-xs text-muted-foreground">
-            {problem?.primary_kpi && (
-              <Badge variant="outline" className="font-normal">
-                KPI · {problem.primary_kpi}
-              </Badge>
-            )}
-            {flagKey && (
-              <Badge variant="outline" className="font-mono font-normal">
-                flag · {flagKey}
-              </Badge>
-            )}
-            {prUrl && (
-              <a
-                href={prUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 font-normal text-foreground hover:bg-accent"
-              >
-                <GitPullRequest className="h-3 w-3" />
-                PR
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-          </div>
+    <div className="w-full min-w-0 space-y-6">
+      <header className="space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="font-mono text-2xl font-semibold tracking-tight">
+            {experimentSlug}
+          </h1>
+          <StatusBadge status={status} />
         </div>
-
-        <div className="w-full max-w-md space-y-2">
-          <RunNextAgentPanel {...panelProps} />
-          <AgentRunIndicator agent={pendingAgent} />
+        {problem?.description && (
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            {problem.description}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2 pt-1 text-xs text-muted-foreground">
+          {problem?.primary_kpi && (
+            <Badge variant="outline" className="font-normal">
+              KPI · {problem.primary_kpi}
+            </Badge>
+          )}
+          {flagKey && (
+            <Badge variant="outline" className="font-mono font-normal">
+              flag · {flagKey}
+            </Badge>
+          )}
+          {prUrl && (
+            <a
+              href={prUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 font-normal text-foreground hover:bg-accent"
+            >
+              <GitPullRequest className="h-3 w-3" />
+              PR
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
         </div>
       </header>
+
+      <div className="space-y-2">
+        <RunNextAgentPanel {...panelProps} />
+        <AgentRunIndicator agent={pendingAgent} />
+      </div>
 
       <ExperimentCard
         step={1}

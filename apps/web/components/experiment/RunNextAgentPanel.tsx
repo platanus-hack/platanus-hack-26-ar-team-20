@@ -1,14 +1,17 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   FastForward,
   FlaskConical,
   GitPullRequest,
   Lightbulb,
   Microscope,
+  RefreshCcw,
   Rocket,
   Scissors,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,11 +20,13 @@ import {
   type AgentName,
   runArchitectCompose,
   runArchitectConsolidate,
+  runDemoReset,
   runDirector,
   runFastForward,
   runLab,
   runWitness,
 } from "@/lib/agent-actions";
+import { RunAllModal } from "@/components/experiment/RunAllModal";
 
 export type RunNextAgentPanelProps = {
   experimentRowId: string;
@@ -64,6 +69,8 @@ export function RunNextAgentPanel({
   onAgentChange,
 }: RunNextAgentPanelProps) {
   const [, startTransition] = useTransition();
+  const router = useRouter();
+  const [runAllOpen, setRunAllOpen] = useState(false);
 
   const buttons: ButtonSpec[] = [
     {
@@ -118,34 +125,92 @@ export function RunNextAgentPanel({
 
   const visibleButtons = buttons.filter((b) => b.visible);
 
+  const extractPrUrl = (data: unknown): string | null => {
+    if (!data || typeof data !== "object") return null;
+    const url = (data as { pr_url?: unknown }).pr_url;
+    return typeof url === "string" && url.startsWith("http") ? url : null;
+  };
+
   const trigger = (spec: ButtonSpec) => {
     if (pendingAgent !== null) return;
     onAgentChange(spec.agent);
     startTransition(async () => {
       const result = await spec.run();
       if (result.ok) {
-        toast.success(`${spec.label} ✓`);
+        const prUrl = extractPrUrl(result.data);
+        if (prUrl) {
+          toast.success(`${spec.label} ✓`, {
+            description: prUrl,
+            action: {
+              label: "Open PR",
+              onClick: () => window.open(prUrl, "_blank", "noopener"),
+            },
+            duration: 8000,
+          });
+        } else {
+          toast.success(`${spec.label} ✓`);
+        }
       } else {
-        toast.error(`${spec.label} failed: ${result.error}`);
+        toast.error(`${spec.label} failed: ${result.error}`, {
+          duration: 10000,
+        });
       }
+      router.refresh();
       onAgentChange(null);
+    });
+  };
+
+  const triggerReset = () => {
+    if (pendingAgent !== null) return;
+    startTransition(async () => {
+      const result = await runDemoReset(orgPath);
+      if (result.ok) {
+        toast.success("Demo state reset");
+      } else {
+        toast.error(`Reset failed: ${result.error}`);
+      }
+      router.refresh();
     });
   };
 
   return (
     <div className="space-y-3 rounded-lg border bg-background p-4 shadow-sm">
-      <div className="flex items-center gap-2">
-        <Lightbulb className="h-4 w-4 text-muted-foreground" />
-        <h2 className="text-sm font-semibold">Run next agent</h2>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Lightbulb className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold">Run next agent</h2>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={triggerReset}
+          disabled={pendingAgent !== null}
+          title="Reset the demo experiment back to a clean 'designing' state"
+        >
+          <RefreshCcw className="h-3.5 w-3.5" />
+          Reset
+        </Button>
       </div>
+
+      <Button
+        className="w-full"
+        size="default"
+        onClick={() => setRunAllOpen(true)}
+        disabled={pendingAgent !== null}
+      >
+        <Zap className="h-4 w-4" />
+        Run full demo loop
+        <span className="text-xs opacity-70">(~30s)</span>
+      </Button>
+
       <p className="text-xs text-muted-foreground">
-        Demo controls. Cada botón ejecuta el siguiente agente del flujo.
+        O ejecutá los agentes uno por uno:
       </p>
       <div className="flex flex-wrap gap-2">
         {visibleButtons.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            Nada para correr. El experimento terminó el ciclo o está esperando
-            otro evento.
+            Nada para correr. Hacé Reset para reiniciar el experimento, o
+            esperá a que llegue un evento externo.
           </p>
         ) : (
           visibleButtons.map((spec) => {
@@ -166,6 +231,14 @@ export function RunNextAgentPanel({
           })
         )}
       </div>
+
+      <RunAllModal
+        experimentRowId={experimentRowId}
+        experimentSlug={experimentSlug}
+        orgPath={orgPath}
+        open={runAllOpen}
+        onOpenChange={setRunAllOpen}
+      />
     </div>
   );
 }

@@ -26,7 +26,10 @@ import {
   ExperimentRow,
   type ExperimentRowData,
 } from "@/components/dashboard/ExperimentRow";
+import { WelcomeModal } from "@/components/dashboard/WelcomeModal";
 import { createServerClient } from "@/lib/supabase/server";
+
+const DEMO_LANDING_EXPERIMENT_SLUG = "exp_cart_conv_2026";
 
 const ACTIVE_STATUSES = ["running", "analyzing", "consolidating"] as const;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -227,8 +230,21 @@ export default async function OrgOverviewPage({
     status: e.status,
   }));
 
+  // Land the user on the demo experiment after a 5s "reading the repo"
+  // intro modal. The modal gates itself with sessionStorage so it only
+  // shows once per browser session.
+  const landingExperimentSlug =
+    activeExps.find((e) => e.experiment_id === DEMO_LANDING_EXPERIMENT_SLUG)
+      ?.experiment_id ??
+    activeExps[0]?.experiment_id ??
+    DEMO_LANDING_EXPERIMENT_SLUG;
+
   return (
     <div className="space-y-6">
+      <WelcomeModal
+        experimentSlug={landingExperimentSlug}
+        orgSlug={orgSlug}
+      />
       <header className="flex items-center justify-between">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">

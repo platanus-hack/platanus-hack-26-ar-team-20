@@ -55,9 +55,12 @@ export async function runLab(
   problem: unknown,
   orgPath: string
 ): Promise<AgentActionResult> {
-  const result = await postJson(`/experiments/${experimentRowId}/lab/run`, {
-    problem,
-  });
+  const body =
+    problem === undefined || problem === null ? {} : { problem };
+  const result = await postJson(
+    `/experiments/${experimentRowId}/lab/run`,
+    body
+  );
   if (result.ok) revalidatePath(orgPath);
   return result;
 }
@@ -80,6 +83,20 @@ export async function runFastForward(
   const result = await postJson(
     `/experiments/${experimentSlug}/fast-forward`,
     { days: 8 }
+  );
+  if (result.ok) revalidatePath(orgPath);
+  return result;
+}
+
+// Bumps shipped_at backwards (and flips status='shipped' if not already).
+// Used by Run-all between Director and Architect-consolidate.
+export async function runFastForwardShipped(
+  experimentSlug: string,
+  orgPath: string
+): Promise<AgentActionResult> {
+  const result = await postJson(
+    `/demo/fast-forward/${experimentSlug}`,
+    { days: 7, target: "shipped_at" }
   );
   if (result.ok) revalidatePath(orgPath);
   return result;
@@ -111,6 +128,17 @@ export async function runArchitectConsolidate(
     `/experiments/${experimentSlug}/architect/consolidate`
   );
   if (result.ok) revalidatePath(orgPath);
+  return result;
+}
+
+export async function runDemoReset(
+  orgPath: string
+): Promise<AgentActionResult> {
+  const result = await postJson("/demo/reset");
+  if (result.ok) {
+    revalidatePath(orgPath);
+    revalidatePath("/", "layout");
+  }
   return result;
 }
 

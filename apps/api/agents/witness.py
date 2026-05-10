@@ -186,6 +186,41 @@ class WitnessAgent(BaseAgent):
             stats = self.posthog.thompson_multi_arm(arms=arms)
             n_total = sum(int(a["n"]) for a in arms)
 
+            # Demo fast path: skip Claude entirely and use the deterministic
+            # fallback. With the canned counts injected by _collect_arms, the
+            # fallback always produces ship_winner — which is what we need
+            # for "Run all" to actually complete the loop in 30s.
+            if bool(getattr(settings, "helix_demo_mode", False)):
+                output = self._fallback_output(
+                    exp=exp,
+                    flag_key=flag_key,
+                    primary_kpi=primary_kpi or "",
+                    days_live=days_live,
+                    min_obs=min_obs,
+                    arms=arms,
+                    stats=stats,
+                    n_total=n_total,
+                )
+                output.experiment_id = exp["experiment_id"]
+                output.flag_key = flag_key
+                output.primary_kpi = primary_kpi or output.primary_kpi
+                output.days_live = days_live
+                output.min_observation_days = min_obs
+                output.n_total = n_total
+                if output.experiment_verdict != "ship_winner":
+                    output.winning_variant = None
+                self._persist_results(experiment_id=exp_row_id, output=output)
+                await self._audit(
+                    org_id=org_id,
+                    experiment_id=exp_row_id,
+                    input_data=input_data,
+                    output_data=output,
+                    tokens_in=0,
+                    tokens_out=0,
+                    duration_ms=int((time.monotonic() - start) * 1000),
+                )
+                return output
+
             user_message = json.dumps(
                 {
                     "experiment": {
@@ -233,6 +268,28 @@ class WitnessAgent(BaseAgent):
                     stats=stats,
                     n_total=n_total,
                 )
+
+            # Demo guarantee: if the LLM was conservative ("no_signal" /
+            # "inconclusive") but the deterministic fallback would pick a
+            # winner from the same numbers, override. Otherwise the demo
+            # chain breaks at this step (Director picks 'wait' → status
+            # never flips to 'shipped' → the Consolidate UI button gated
+            # on that status never appears, so no cleanup PR can ever be
+            # opened from the dashboard).
+            demo_mode = bool(getattr(settings, "helix_demo_mode", False))
+            if demo_mode and output.experiment_verdict != "ship_winner":
+                fb = self._fallback_output(
+                    exp=exp,
+                    flag_key=flag_key,
+                    primary_kpi=primary_kpi or "",
+                    days_live=days_live,
+                    min_obs=min_obs,
+                    arms=arms,
+                    stats=stats,
+                    n_total=n_total,
+                )
+                if fb.experiment_verdict == "ship_winner" and fb.winning_variant:
+                    output = fb
 
             output.experiment_id = exp["experiment_id"]
             output.flag_key = flag_key
