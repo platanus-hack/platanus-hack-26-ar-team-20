@@ -65,16 +65,20 @@ end-to-end con `bash infra/verify-demo.sh`.
 
 ## 2) Railway — Backend FastAPI
 
-El `Dockerfile` está en `apps/api/Dockerfile`. El context de build es el
-**repo root** (necesita `apps/api/` y `packages/prompts/` ambos).
+El `Dockerfile` está en la **raíz del repo** (Railway rechaza Dockerfiles
+nested con "skipping Dockerfile as it is not rooted at a valid path").
+El `railway.json` que está acá lo apunta automáticamente; no hace falta
+configurar nada en la UI.
 
 1. <https://railway.app> → **New Project** → **Deploy from GitHub repo** →
-   seleccioná este repo.
+   seleccioná `JoaquinGiorgis/helix` (no el repo de la org — Railway
+   bloquea repos de organizaciones para usuarios free).
 
-2. En el servicio creado, **Settings**:
-   - **Root Directory**: `/` (vacío, raíz del repo).
-   - **Dockerfile Path**: `apps/api/Dockerfile`.
-   - Builder: Dockerfile.
+2. Railway lee `railway.json` automáticamente. Si aún así detecta Node y
+   no Dockerfile, en **Settings** del servicio:
+   - **Root Directory**: dejar vacío (raíz del repo).
+   - **Builder**: Dockerfile.
+   - **Dockerfile Path**: `Dockerfile`.
 
 3. **Variables** del servicio (todas obligatorias salvo las marcadas opcionales):
 

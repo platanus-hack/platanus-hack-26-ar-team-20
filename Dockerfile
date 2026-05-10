@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 # uv is the package manager declared by pyproject.toml — install it first
 # and reuse its venv-less workflow so the Docker layer stays small.
-COPY --from=ghcr.io/astral-sh/uv:0.5.4 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \

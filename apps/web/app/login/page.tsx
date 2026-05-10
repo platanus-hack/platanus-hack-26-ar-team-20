@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +19,6 @@ type Mode = "password" | "magic";
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,8 +44,10 @@ function LoginForm() {
       return;
     }
     toast.success("Signed in.");
-    router.push(next);
-    router.refresh();
+    // Hard navigate so the next request includes the freshly-set Supabase
+    // cookies. router.push + refresh races with cookie persistence on
+    // Vercel cold starts, which redirects the user back to /login.
+    window.location.replace(next);
   };
 
   const handleMagicLink = async (e: React.FormEvent) => {

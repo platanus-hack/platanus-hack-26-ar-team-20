@@ -1,0 +1,39 @@
+# Frontend / monorepo dependencies — not needed for the API image.
+apps/web/
+node_modules/
+**/node_modules/
+
+# Python venvs and caches.
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+
+# Local-only env files (we ship env vars via Railway).
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Build artifacts.
+**/.next/
+**/dist/
+**/build/
+
+# VCS + editor metadata.
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+
+# Repo-level docs and infra that the runtime doesn't need.
+DEPLOY.md
+README.md
+infra/
+examples/
+*.png
