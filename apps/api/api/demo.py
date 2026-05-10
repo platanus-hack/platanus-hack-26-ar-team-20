@@ -28,6 +28,9 @@ SEED_EXPERIMENT_SLUG = "exp_cart_conv_2026"
 SEED_EXPERIMENT_SLUGS = [
     "exp_cart_conv_2026",
     "exp_search_relevance_2025",
+    "exp_signup_cta_copy_2026",
+    "exp_free_shipping_banner_2026",
+    "exp_welcome_email_subject_2026",
 ]
 
 # The seed experiment ships with the original Team20 problem, design, and

@@ -65,7 +65,9 @@ values (
 ) on conflict (org_id, github_repo_full_name) do nothing;
 
 ------------------------------------------------------------------------------
--- Demo experiment, already in `running` with design + variants pre-loaded
+-- Demo experiment, fresh in `designing` with design + variants pre-loaded
+-- so the demo can replay the full Brief→Lab→Compose→Witness→Director loop
+-- from scratch (matches the post-/api/demo/reset shape).
 ------------------------------------------------------------------------------
 insert into experiments (
   id, org_id, repo_id, experiment_id, source,
@@ -102,8 +104,8 @@ insert into experiments (
     {"variant_key":"urgency_timer","axis":"urgency","hypothesis":"Banner de urgency sube la conversión a corto plazo","implementation_brief":"Banner con countdown 15min","expected_lift_pp":6}
   ]'::jsonb,
   'exp_cart_conv_2026',
-  'running',
-  now() - interval '6 days'
+  'designing',
+  null
 ) on conflict (id) do nothing;
 
 ------------------------------------------------------------------------------
@@ -178,4 +180,185 @@ insert into decisions (
   false,
   now() - interval '10 days',
   now() - interval '10 days'
+) on conflict (id) do nothing;
+
+------------------------------------------------------------------------------
+-- Easier-to-grok demo experiments. Three "anyone-on-the-team gets it"
+-- bets so the dashboard reads as a real product team's loop, not just a
+-- pair of technical bets:
+--   * exp_signup_cta_copy_2026     — designing  ("por comenzar")
+--   * exp_free_shipping_banner_2026 — consolidated (shipped + cleaned up)
+--   * exp_welcome_email_subject_2026 — consolidated (shipped + cleaned up)
+------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
+-- exp_signup_cta_copy_2026 — fresh brief, no Lab run yet (status=designing)
+------------------------------------------------------------------------------
+insert into experiments (
+  id, org_id, repo_id, experiment_id, source,
+  problem, status
+) values (
+  '00000000-0000-0000-0000-000000000300',
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000010',
+  'exp_signup_cta_copy_2026',
+  'human_brief',
+  '{
+    "type": "copy_change",
+    "surface_area": "homepage_signup_button",
+    "description": "Probar copy alternativo en el botón de signup de la home — sospechamos que ''Empezá gratis'' convierte mejor que ''Crear cuenta''",
+    "primary_kpi": "signup_completion_rate",
+    "current_value": 0.184,
+    "target_lift_pp": 4,
+    "guardrail_kpis": ["bounce_rate","activation_rate_d1"]
+  }'::jsonb,
+  'designing'
+) on conflict (id) do nothing;
+
+------------------------------------------------------------------------------
+-- exp_free_shipping_banner_2026 — banner "Envío gratis sobre $50" en home.
+-- Already shipped + consolidated, banner_top wins +3.4pp en cart completion.
+------------------------------------------------------------------------------
+insert into experiments (
+  id, org_id, repo_id, experiment_id, source,
+  problem, design, variants, results,
+  flag_key, pr_url, status, started_at, shipped_at, consolidated_at
+) values (
+  '00000000-0000-0000-0000-000000000400',
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000010',
+  'exp_free_shipping_banner_2026',
+  'human_brief',
+  '{
+    "type": "ux_change",
+    "surface_area": "homepage_hero",
+    "description": "Mostrar un banner ''Envío gratis sobre $50'' en la home sube la conversión cart→completion al subir el AOV target",
+    "primary_kpi": "cart_completion_rate",
+    "current_value": 0.621,
+    "target_lift_pp": 3,
+    "guardrail_kpis": ["aov","refund_rate_30d"]
+  }'::jsonb,
+  '{
+    "primary_kpi": "cart_completion_rate",
+    "guardrail_kpis": ["aov","refund_rate_30d"],
+    "traffic_split": [0.34,0.33,0.33],
+    "min_n_per_arm": 2800,
+    "min_observation_days": 7,
+    "max_observation_days": 14,
+    "decision_rule": "Bayesian Thompson sampling. Winner declared when p(best > control) > 0.95 AND no guardrail breach."
+  }'::jsonb,
+  '[
+    {"variant_key":"control","is_control":true,"hypothesis":"Status quo: sin banner de envío gratis","implementation_brief":"No changes"},
+    {"variant_key":"banner_top","axis":"value_prop","hypothesis":"Banner azul fijo arriba de la home con ''Envío gratis sobre $50'' sube la conversión por anclar la promesa","implementation_brief":"Componente Banner sticky en el top del layout","expected_lift_pp":3},
+    {"variant_key":"banner_floating","axis":"value_prop","hypothesis":"Banner sticky en bottom-right es menos invasivo y captura usuarios al scrollear","implementation_brief":"Componente FloatingBanner anclado al viewport","expected_lift_pp":2}
+  ]'::jsonb,
+  '{
+    "primary_kpi": "cart_completion_rate",
+    "winning_variant": "banner_top",
+    "experiment_verdict": "winner_declared",
+    "p_best_gt_control": 0.981,
+    "guardrail_breach": false,
+    "n_total": 9015,
+    "variant_verdicts": [
+      {"variant_key":"control","is_control":true,"n":3000,"conv":1863,"rate":0.621,"p_better_than_control":0.0,"p_is_best":0.02,"guardrail_breach":false,"verdict":"control"},
+      {"variant_key":"banner_top","is_control":false,"n":3010,"conv":1972,"rate":0.655,"p_better_than_control":0.981,"p_is_best":0.92,"guardrail_breach":false,"verdict":"winner"},
+      {"variant_key":"banner_floating","is_control":false,"n":3005,"conv":1917,"rate":0.638,"p_better_than_control":0.74,"p_is_best":0.06,"guardrail_breach":false,"verdict":"inconclusive"}
+    ],
+    "narrative": "banner_top supera al control en +3.4pp con p(best > control) = 0.981 sin breach de AOV ni de refund_rate_30d. Lo rampeamos a 100%."
+  }'::jsonb,
+  'exp_free_shipping_banner_2026',
+  'https://github.com/JoaquinGiorgis/helix-demo-saas/pull/7',
+  'consolidated',
+  now() - interval '20 days',
+  now() - interval '8 days',
+  now() - interval '2 days'
+) on conflict (id) do nothing;
+
+insert into decisions (
+  id, org_id, experiment_id, action, rationale, executed,
+  human_required, human_approved_at, created_at
+) values (
+  '00000000-0000-0000-0000-000000000401',
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000400',
+  'ship_winner',
+  'banner_top supera al control con p(best > control) = 0.981 (+3.4pp en cart_completion_rate) sin breach de AOV ni de refund_rate_30d. Rampeamos a 100% de tráfico y consolidamos.',
+  true,
+  false,
+  now() - interval '8 days',
+  now() - interval '8 days'
+) on conflict (id) do nothing;
+
+------------------------------------------------------------------------------
+-- exp_welcome_email_subject_2026 — A/B/C de asunto del email de bienvenida.
+-- Already shipped + consolidated, "friendly" gana +6.1pp en open rate.
+------------------------------------------------------------------------------
+insert into experiments (
+  id, org_id, repo_id, experiment_id, source,
+  problem, design, variants, results,
+  flag_key, pr_url, status, started_at, shipped_at, consolidated_at
+) values (
+  '00000000-0000-0000-0000-000000000500',
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000010',
+  'exp_welcome_email_subject_2026',
+  'human_brief',
+  '{
+    "type": "copy_change",
+    "surface_area": "welcome_email",
+    "description": "Subir el open rate del email de bienvenida probando 3 asuntos distintos — el actual se siente robótico",
+    "primary_kpi": "email_open_rate",
+    "current_value": 0.341,
+    "target_lift_pp": 5,
+    "guardrail_kpis": ["unsubscribe_rate","spam_complaint_rate"]
+  }'::jsonb,
+  '{
+    "primary_kpi": "email_open_rate",
+    "guardrail_kpis": ["unsubscribe_rate","spam_complaint_rate"],
+    "traffic_split": [0.34,0.33,0.33],
+    "min_n_per_arm": 7500,
+    "min_observation_days": 5,
+    "max_observation_days": 10,
+    "decision_rule": "Bayesian Thompson sampling. Winner declared when p(best > control) > 0.95 AND no guardrail breach."
+  }'::jsonb,
+  '[
+    {"variant_key":"control","is_control":true,"hypothesis":"Status quo: ''Bienvenido a Team20 ✨''","implementation_brief":"No changes"},
+    {"variant_key":"friendly","axis":"tone","hypothesis":"Tono cercano (''Hola — gracias por sumarte'') sube el open rate por sentirse menos transaccional","implementation_brief":"Cambiar el subject template del welcome email","expected_lift_pp":5},
+    {"variant_key":"action_oriented","axis":"urgency","hypothesis":"Asunto orientado a acción (''Tu cuenta ya está lista — empezá ahora'') sube el open por crear sentido de progreso","implementation_brief":"Cambiar el subject template del welcome email","expected_lift_pp":3}
+  ]'::jsonb,
+  '{
+    "primary_kpi": "email_open_rate",
+    "winning_variant": "friendly",
+    "experiment_verdict": "winner_declared",
+    "p_best_gt_control": 0.997,
+    "guardrail_breach": false,
+    "n_total": 24010,
+    "variant_verdicts": [
+      {"variant_key":"control","is_control":true,"n":8000,"conv":2728,"rate":0.341,"p_better_than_control":0.0,"p_is_best":0.0,"guardrail_breach":false,"verdict":"control"},
+      {"variant_key":"friendly","is_control":false,"n":8010,"conv":3220,"rate":0.402,"p_better_than_control":0.997,"p_is_best":0.96,"guardrail_breach":false,"verdict":"winner"},
+      {"variant_key":"action_oriented","is_control":false,"n":8000,"conv":3024,"rate":0.378,"p_better_than_control":0.92,"p_is_best":0.04,"guardrail_breach":false,"verdict":"inconclusive"}
+    ],
+    "narrative": "friendly supera al control en +6.1pp con p(best > control) = 0.997 sin breach de unsubscribe ni de spam complaints. Lo dejamos como subject default."
+  }'::jsonb,
+  'exp_welcome_email_subject_2026',
+  'https://github.com/JoaquinGiorgis/helix-demo-saas/pull/9',
+  'consolidated',
+  now() - interval '14 days',
+  now() - interval '5 days',
+  now() - interval '1 day'
+) on conflict (id) do nothing;
+
+insert into decisions (
+  id, org_id, experiment_id, action, rationale, executed,
+  human_required, human_approved_at, created_at
+) values (
+  '00000000-0000-0000-0000-000000000501',
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000500',
+  'ship_winner',
+  'friendly supera al control con p(best > control) = 0.997 (+6.1pp en email_open_rate) sin breach de unsubscribe_rate ni de spam_complaint_rate. Lo dejamos como subject default y consolidamos.',
+  true,
+  false,
+  now() - interval '5 days',
+  now() - interval '5 days'
 ) on conflict (id) do nothing;
