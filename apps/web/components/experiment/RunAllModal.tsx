@@ -288,7 +288,7 @@ export function RunAllModal({
         if (!nextOpen) router.refresh();
       }}
     >
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
@@ -312,7 +312,7 @@ export function RunAllModal({
           )}
         </div>
 
-        <ol className="space-y-3">
+        <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {STEPS.map((step) => {
             const r = results[step.key];
             const isCurrent = currentStep === step.key;
