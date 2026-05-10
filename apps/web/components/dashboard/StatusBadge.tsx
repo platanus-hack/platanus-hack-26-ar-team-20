@@ -15,21 +15,25 @@ const STATUS_TONE: Record<string, Tone> = {
   implementing: "info",
   running: "info",
   analyzing: "warning",
-  shipped: "success",
+  shipped: "info",
   consolidating: "warning",
   consolidated: "success",
   killed: "danger",
 };
 
+// Friendly labels exposed in the dashboard. We intentionally relabel
+// `shipped` → "Esperando resultados" because Director ships the winner to
+// 100% but the experiment is still gathering downstream metrics for ~7
+// days — the team is "waiting for the real-world confirmation", not done.
 const STATUS_LABEL: Record<string, string> = {
-  designing: "designing",
-  implementing: "implementing",
-  running: "running",
-  analyzing: "analyzing",
-  shipped: "shipped",
-  consolidating: "consolidating",
-  consolidated: "consolidated",
-  killed: "killed",
+  designing: "Designing",
+  implementing: "Implementing",
+  running: "Running",
+  analyzing: "Analyzing",
+  shipped: "Esperando resultados",
+  consolidating: "Consolidating",
+  consolidated: "Shipped",
+  killed: "Killed",
 };
 
 export function StatusBadge({ status }: { status: string }) {
