@@ -132,18 +132,17 @@ export function ExperimentClient(props: ExperimentClientProps) {
 
   // Auto-kick the full Brief→Lab→Compose→Witness→Director loop the moment
   // someone lands on a `designing` demo experiment. The modal stops at the
-  // "Esperando resultados" step (Witness ramps the winner, then waits 7
-  // days for real-world confirmation) and surfaces the PR link there. The
-  // session gate keeps it from re-opening if status flips back to
-  // designing mid-session (e.g. after a manual /reset).
+  // "Esperando resultados" panel (Director ramps the winner; Witness then
+  // re-confirms with real traffic across the 7-day observation window) and
+  // surfaces the PR link there. The status itself acts as the gate — once
+  // the loop completes the experiment leaves `designing`, so this won't
+  // re-fire on subsequent renders. After a manual /reset back to
+  // designing, the modal will auto-open again, which is what we want.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!fastForwardEnabled) return;
     if (status !== "designing") return;
     if (!AUTO_RUN_LOOP_SLUGS.has(experimentSlug)) return;
-    const gateKey = `helix:autorun:${experimentSlug}`;
-    if (sessionStorage.getItem(gateKey) === "1") return;
-    sessionStorage.setItem(gateKey, "1");
     setRunAllOpen(true);
   }, [status, experimentSlug, fastForwardEnabled]);
 
