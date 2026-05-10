@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutGrid, LogOut, Plus } from "lucide-react";
+import { Bot, LayoutGrid, LogOut, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -28,6 +28,12 @@ const NAV_ITEMS: NavItem[] = [
     href: "/experiments/new",
     icon: Plus,
     hint: "N",
+  },
+  {
+    label: "Agents",
+    href: "/agents",
+    icon: Bot,
+    hint: "A",
   },
 ];
 

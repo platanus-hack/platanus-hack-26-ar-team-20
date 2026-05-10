@@ -113,12 +113,15 @@ export default async function OrgOverviewPage({
     reposRes,
     shippedCountRes,
   ] = await Promise.all([
+    // Designing experiments (started_at is null) come first so a freshly
+    // briefed experiment isn't buried under historical shipped ones; the
+    // rest sorts by started_at desc (most recent first).
     supabase
       .from("experiments")
       .select(
         "id, experiment_id, status, started_at, variants, results, consolidated_at, repo_id, pr_url, repos(github_repo_full_name)"
       )
-      .order("started_at", { ascending: false, nullsFirst: false })
+      .order("started_at", { ascending: false, nullsFirst: true })
       .limit(10),
     supabase
       .from("experiments")

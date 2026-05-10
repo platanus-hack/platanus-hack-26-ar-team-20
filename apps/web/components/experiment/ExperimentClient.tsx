@@ -14,7 +14,14 @@ import {
   RunNextAgentPanel,
   type RunNextAgentPanelProps,
 } from "@/components/experiment/RunNextAgentPanel";
+import { RunAllModal } from "@/components/experiment/RunAllModal";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+
+// Slug allowlist for the auto-run loop. The modal kicks off Lab → Compose →
+// Witness → Director, but Compose only succeeds against experiments whose
+// variant files are committed in JoaquinGiorgis/helix-demo-saas. The cart
+// demo is the only one wired up end-to-end today.
+const AUTO_RUN_LOOP_SLUGS = new Set<string>(["exp_cart_conv_2026"]);
 import {
   VariantTable,
   type VariantVerdict,
@@ -120,7 +127,25 @@ export function ExperimentClient(props: ExperimentClientProps) {
 
   const router = useRouter();
   const [pendingAgent, setPendingAgent] = useState<AgentName | null>(null);
+  const [runAllOpen, setRunAllOpen] = useState(false);
   const orgPath = `/${orgSlug}/experiments/${experimentSlug}`;
+
+  // Auto-kick the full Brief→Lab→Compose→Witness→Director loop the moment
+  // someone lands on a `designing` demo experiment. The modal stops at the
+  // "Esperando resultados" step (Witness ramps the winner, then waits 7
+  // days for real-world confirmation) and surfaces the PR link there. The
+  // session gate keeps it from re-opening if status flips back to
+  // designing mid-session (e.g. after a manual /reset).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!fastForwardEnabled) return;
+    if (status !== "designing") return;
+    if (!AUTO_RUN_LOOP_SLUGS.has(experimentSlug)) return;
+    const gateKey = `helix:autorun:${experimentSlug}`;
+    if (sessionStorage.getItem(gateKey) === "1") return;
+    sessionStorage.setItem(gateKey, "1");
+    setRunAllOpen(true);
+  }, [status, experimentSlug, fastForwardEnabled]);
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -201,6 +226,14 @@ export function ExperimentClient(props: ExperimentClientProps) {
 
   return (
     <div className="w-full min-w-0 space-y-8">
+      <RunAllModal
+        experimentRowId={experimentRowId}
+        experimentSlug={experimentSlug}
+        orgPath={orgPath}
+        open={runAllOpen}
+        onOpenChange={setRunAllOpen}
+      />
+
       {/* Header — experiment slug + meta. Clean, breathable. */}
       <header className="space-y-4">
         <div className="space-y-2">
