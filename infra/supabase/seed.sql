@@ -107,60 +107,64 @@ insert into experiments (
 ) on conflict (id) do nothing;
 
 ------------------------------------------------------------------------------
--- Already-shipped experiment (`exp_checkout_button_2025`).
--- Lives in 'shipped' state with full results so the dashboard has something
--- finished to click into — KPI lift, decision row, merged PR.
+-- Historical, fully-shipped experiment (`exp_search_relevance_2025`).
+-- Lives in 'consolidated' state with full results, a merged PR for the
+-- winning variant, and a corresponding decision row — so the dashboard has
+-- a clearly-finished experiment in a different domain than the cart demo.
 ------------------------------------------------------------------------------
 insert into experiments (
   id, org_id, repo_id, experiment_id, source,
   problem, design, variants, results,
-  flag_key, pr_url, status, started_at, shipped_at
+  flag_key, pr_url, status, started_at, shipped_at, consolidated_at
 ) values (
   '00000000-0000-0000-0000-000000000200',
   '00000000-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-000000000010',
-  'exp_checkout_button_2025',
+  'exp_search_relevance_2025',
   'human_brief',
   '{
-    "type": "cta_clarity",
-    "surface_area": "checkout_step_1",
-    "description": "Clarificar el CTA del paso 1 del checkout para que más usuarios avancen al paso 2",
-    "primary_kpi": "checkout_step1_to_step2_rate",
-    "current_value": 0.62,
-    "target_lift_pp": 4,
-    "guardrail_kpis": ["aov","refund_rate_30d","support_tickets_per_user_7d"]
+    "type": "ranking_algo",
+    "surface_area": "product_search_results",
+    "description": "Mejorar el ranking de resultados de búsqueda con embeddings semánticos para subir search→purchase",
+    "primary_kpi": "search_to_purchase_rate",
+    "current_value": 0.087,
+    "target_lift_pp": 1.5,
+    "guardrail_kpis": ["ndcg_at_10","search_latency_p95_ms","zero_result_rate"]
   }'::jsonb,
   '{
-    "primary_kpi": "checkout_step1_to_step2_rate",
-    "guardrail_kpis": ["aov","refund_rate_30d","support_tickets_per_user_7d"],
-    "traffic_split": [0.5,0.5],
-    "min_n_per_arm": 1500,
+    "primary_kpi": "search_to_purchase_rate",
+    "guardrail_kpis": ["ndcg_at_10","search_latency_p95_ms","zero_result_rate"],
+    "traffic_split": [0.34,0.33,0.33],
+    "min_n_per_arm": 2500,
     "min_observation_days": 7,
     "max_observation_days": 14,
     "decision_rule": "Bayesian Thompson sampling. Winner declared when p(best > control) > 0.95 AND no guardrail breach."
   }'::jsonb,
   '[
-    {"variant_key":"control","is_control":true,"hypothesis":"Status quo: CTA dice ''Continuar''","implementation_brief":"No changes"},
-    {"variant_key":"explicit_cta","axis":"clarity","hypothesis":"CTA explícito ''Ir a pago seguro'' sube la conversión a paso 2","implementation_brief":"Cambio de copy en el botón principal del paso 1","expected_lift_pp":4}
+    {"variant_key":"control","is_control":true,"hypothesis":"Status quo: BM25 keyword ranking","implementation_brief":"No changes"},
+    {"variant_key":"semantic_v2","axis":"recall","hypothesis":"SBERT embeddings + cosine re-rank top-50 sube search→purchase +1.7pp por mejor match en queries de cola larga","implementation_brief":"Hook al pipeline de search: re-rank con embeddings","expected_lift_pp":1.7},
+    {"variant_key":"learned_to_rank","axis":"learning","hypothesis":"LTR (XGBoost) entrenado con clicks históricos sube +0.9pp por aprovechar señales de comportamiento","implementation_brief":"Modelo LTR servido detrás del search service","expected_lift_pp":0.9}
   ]'::jsonb,
   '{
-    "winning_variant": "explicit_cta",
-    "p_best_gt_control": 0.987,
+    "winning_variant": "semantic_v2",
+    "p_best_gt_control": 0.992,
     "guardrail_breach": false,
-    "samples_per_arm": 1812,
+    "samples_per_arm": 2510,
     "variant_verdicts": [
-      {"variant_key":"control","is_control":true,"rate":0.621,"samples":1798},
-      {"variant_key":"explicit_cta","is_control":false,"rate":0.667,"samples":1826}
+      {"variant_key":"control","is_control":true,"rate":0.087,"samples":2502},
+      {"variant_key":"semantic_v2","is_control":false,"rate":0.104,"samples":2516},
+      {"variant_key":"learned_to_rank","is_control":false,"rate":0.094,"samples":2498}
     ]
   }'::jsonb,
-  'exp_checkout_button_2025',
-  'https://github.com/JoaquinGiorgis/helix-demo-saas/pull/1',
-  'shipped',
-  now() - interval '21 days',
-  now() - interval '5 days'
+  'exp_search_relevance_2025',
+  'https://github.com/JoaquinGiorgis/helix-demo-saas/pull/4',
+  'consolidated',
+  now() - interval '24 days',
+  now() - interval '10 days',
+  now() - interval '3 days'
 ) on conflict (id) do nothing;
 
--- Decision row (ship_winner) for the shipped experiment.
+-- Decision row (ship_winner) for the historical experiment.
 insert into decisions (
   id, org_id, experiment_id, action, rationale, executed,
   human_required, human_approved_at, created_at
@@ -169,9 +173,9 @@ insert into decisions (
   '00000000-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-000000000200',
   'ship_winner',
-  'explicit_cta supera al control con p(best > control) = 0.987 y sin breach de guardrails (AOV, refunds y support tickets dentro del rango). Rampeamos a 100% de tráfico.',
+  'semantic_v2 supera al control con p(best > control) = 0.992 (+1.7pp en search→purchase, +12% en NDCG@10) sin breach de latencia ni de zero-result rate. Rampeamos a 100% de tráfico y consolidamos el cleanup.',
   true,
   false,
-  now() - interval '5 days',
-  now() - interval '5 days'
+  now() - interval '10 days',
+  now() - interval '10 days'
 ) on conflict (id) do nothing;
