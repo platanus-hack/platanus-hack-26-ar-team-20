@@ -105,3 +105,73 @@ insert into experiments (
   'running',
   now() - interval '6 days'
 ) on conflict (id) do nothing;
+
+------------------------------------------------------------------------------
+-- Already-shipped experiment (`exp_checkout_button_2025`).
+-- Lives in 'shipped' state with full results so the dashboard has something
+-- finished to click into — KPI lift, decision row, merged PR.
+------------------------------------------------------------------------------
+insert into experiments (
+  id, org_id, repo_id, experiment_id, source,
+  problem, design, variants, results,
+  flag_key, pr_url, status, started_at, shipped_at
+) values (
+  '00000000-0000-0000-0000-000000000200',
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000010',
+  'exp_checkout_button_2025',
+  'human_brief',
+  '{
+    "type": "cta_clarity",
+    "surface_area": "checkout_step_1",
+    "description": "Clarificar el CTA del paso 1 del checkout para que más usuarios avancen al paso 2",
+    "primary_kpi": "checkout_step1_to_step2_rate",
+    "current_value": 0.62,
+    "target_lift_pp": 4,
+    "guardrail_kpis": ["aov","refund_rate_30d","support_tickets_per_user_7d"]
+  }'::jsonb,
+  '{
+    "primary_kpi": "checkout_step1_to_step2_rate",
+    "guardrail_kpis": ["aov","refund_rate_30d","support_tickets_per_user_7d"],
+    "traffic_split": [0.5,0.5],
+    "min_n_per_arm": 1500,
+    "min_observation_days": 7,
+    "max_observation_days": 14,
+    "decision_rule": "Bayesian Thompson sampling. Winner declared when p(best > control) > 0.95 AND no guardrail breach."
+  }'::jsonb,
+  '[
+    {"variant_key":"control","is_control":true,"hypothesis":"Status quo: CTA dice ''Continuar''","implementation_brief":"No changes"},
+    {"variant_key":"explicit_cta","axis":"clarity","hypothesis":"CTA explícito ''Ir a pago seguro'' sube la conversión a paso 2","implementation_brief":"Cambio de copy en el botón principal del paso 1","expected_lift_pp":4}
+  ]'::jsonb,
+  '{
+    "winning_variant": "explicit_cta",
+    "p_best_gt_control": 0.987,
+    "guardrail_breach": false,
+    "samples_per_arm": 1812,
+    "variant_verdicts": [
+      {"variant_key":"control","is_control":true,"rate":0.621,"samples":1798},
+      {"variant_key":"explicit_cta","is_control":false,"rate":0.667,"samples":1826}
+    ]
+  }'::jsonb,
+  'exp_checkout_button_2025',
+  'https://github.com/JoaquinGiorgis/helix-demo-saas/pull/1',
+  'shipped',
+  now() - interval '21 days',
+  now() - interval '5 days'
+) on conflict (id) do nothing;
+
+-- Decision row (ship_winner) for the shipped experiment.
+insert into decisions (
+  id, org_id, experiment_id, action, rationale, executed,
+  human_required, human_approved_at, created_at
+) values (
+  '00000000-0000-0000-0000-000000000201',
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000200',
+  'ship_winner',
+  'explicit_cta supera al control con p(best > control) = 0.987 y sin breach de guardrails (AOV, refunds y support tickets dentro del rango). Rampeamos a 100% de tráfico.',
+  true,
+  false,
+  now() - interval '5 days',
+  now() - interval '5 days'
+) on conflict (id) do nothing;
