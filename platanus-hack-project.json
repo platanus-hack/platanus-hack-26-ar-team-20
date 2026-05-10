@@ -1,5 +1,6 @@
 {
-  "project-name": "<FILL THIS>",
-  "project-oneliner-spanish": "<FILL THIS>",
-  "project-description-spanish": "<FILL THIS>"
+  "project-name": "Helix",
+  "project-oneliner-spanish": "Un PM autónomo multi-agente que detecta oportunidades, diseña y codea experimentos multivariados detrás de un feature flag, mide con Bayesian Thompson sampling, y elimina del código las variantes perdedoras para dejar cero deuda técnica.",
+  "project-description-spanish": "Helix es un sistema multi-agente que actúa como Product Manager autónomo para startups SaaS. Detecta oportunidades en producto (o recibe un brief humano), diseña experimentos multivariados, codea las variantes detrás de un feature flag, mide los resultados con muestreo bayesiano de Thompson, elige la ganadora, y abre un PR de cleanup que borra las variantes perdedoras y el flag retirado del codebase. El stack es Next.js 15 + FastAPI + Supabase + PostHog, con Claude Sonnet 4.6 como motor de los agentes (Indexer, Brief, Pulse, Lab, Architect, Witness y Director).",
+  "deploy-url": "https://helix-web-psi.vercel.app/"
 }
