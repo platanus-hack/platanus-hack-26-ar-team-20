@@ -21,6 +21,14 @@ router = APIRouter()
 
 
 SEED_EXPERIMENT_SLUG = "exp_cart_conv_2026"
+# Slugs for any historical / seeded experiments that should survive a reset
+# (e.g. the already-shipped showcase experiment loaded by seed.sql). The
+# active demo experiment is the one in SEED_EXPERIMENT_SLUG; the rest just
+# need to remain intact so the dashboard keeps something to click into.
+SEED_EXPERIMENT_SLUGS = [
+    "exp_cart_conv_2026",
+    "exp_search_relevance_2025",
+]
 
 # The seed experiment ships with the original Team20 problem, design, and
 # variants pre-loaded — see infra/supabase/seed.sql. Reset rehydrates it
@@ -178,15 +186,32 @@ async def fast_forward(
 async def reset_demo(supabase=Depends(get_supabase)) -> dict:
     _require_demo_mode()
 
-    # Wipe derived state for the Team20 org. Order matters: agent_runs
-    # references experiments via on-delete-set-null, so we delete the
-    # children first to keep the audit trail tidy.
-    supabase.table("agent_runs").delete().eq("org_id", DEMO_ORG_ID).execute()
-    supabase.table("decisions").delete().eq("org_id", DEMO_ORG_ID).execute()
+    # Wipe derived state for the active demo experiment only. We need to
+    # leave the seeded historical experiments (and their decisions /
+    # agent_runs) intact so the dashboard always has something finished to
+    # click into.
+    cart_rows = (
+        supabase.table("experiments")
+        .select("id")
+        .eq("org_id", DEMO_ORG_ID)
+        .eq("experiment_id", SEED_EXPERIMENT_SLUG)
+        .execute()
+        .data
+        or []
+    )
+    cart_id = cart_rows[0]["id"] if cart_rows else None
+    if cart_id is not None:
+        supabase.table("agent_runs").delete().eq(
+            "experiment_id", cart_id
+        ).execute()
+        supabase.table("decisions").delete().eq(
+            "experiment_id", cart_id
+        ).execute()
 
-    # Drop extra experiments created by previous verify runs, keep the seed.
-    supabase.table("experiments").delete().eq("org_id", DEMO_ORG_ID).neq(
-        "experiment_id", SEED_EXPERIMENT_SLUG
+    # Drop ad-hoc experiments created by `/experiments` POST or the verify
+    # script — preserve every slug we seed in seed.sql.
+    supabase.table("experiments").delete().eq("org_id", DEMO_ORG_ID).not_.in_(
+        "experiment_id", SEED_EXPERIMENT_SLUGS
     ).execute()
 
     # Restore the seed experiment to a clean post-seed.sql shape so the
