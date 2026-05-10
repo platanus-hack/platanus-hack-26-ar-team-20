@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     github_pat: str = ""
     github_demo_repo: str
 
+    helix_api_internal_token: str = ""
     helix_demo_mode: bool = True
     helix_fast_forward_enabled: bool = True
 

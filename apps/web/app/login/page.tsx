@@ -12,6 +12,18 @@ import { toast } from "sonner";
 
 type Mode = "password" | "magic";
 
+function safeNextPath(value: string | null): string {
+  if (
+    !value ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\")
+  ) {
+    return "/";
+  }
+  return value;
+}
+
 function LoginForm() {
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<Mode>("password");
@@ -20,7 +32,7 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const next = searchParams.get("next") ?? "/";
+  const next = safeNextPath(searchParams.get("next"));
 
   const handlePassword = async (e: React.FormEvent) => {
     e.preventDefault();
