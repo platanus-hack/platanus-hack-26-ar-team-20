@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Plus } from "lucide-react";
@@ -26,9 +27,14 @@ export function Sidebar({ org }: { org: Org }) {
   return (
     <aside className="flex h-screen w-60 flex-col border-r bg-background">
       <div className="flex h-14 items-center border-b px-6">
-        <Link href={orgRoot} className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-md bg-primary" />
-          <span className="text-sm font-semibold">Helix</span>
+        <Link href={orgRoot} className="flex items-center" aria-label="Helix">
+          <Image
+            src="/helix-brand-assets/svg/lockup-horizontal-transparent-dark.svg"
+            alt="Helix"
+            width={96}
+            height={28}
+            priority
+          />
         </Link>
       </div>
 

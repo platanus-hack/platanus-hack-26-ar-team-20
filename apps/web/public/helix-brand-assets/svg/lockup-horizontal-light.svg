@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200" viewBox="0 0 600 200">
+  <rect width="600" height="200" fill="#FAFAFA"/>
+  <g transform="translate(150, 100)">
+    <path d="M 0 -25 Q 20 -5, 40 -25 T 80 -25" fill="none" stroke="#00E5D4" stroke-width="6" stroke-linecap="round"/>
+    <path d="M 0 0 Q 20 -20, 40 0 T 80 0" fill="none" stroke="#0A0E14" stroke-width="6" stroke-linecap="round"/>
+    <path d="M 0 25 Q 20 45, 40 25 T 80 25" fill="none" stroke="#00E5D4" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <text x="270" y="120" font-family="Inter, system-ui, sans-serif" font-size="74" font-weight="500" letter-spacing="-1.5" fill="#0A0E14">helix</text>
+</svg>

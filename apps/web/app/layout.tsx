@@ -15,6 +15,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Helix",
   description: "Self-driving feature flags & experiments",
+  openGraph: {
+    title: "Helix",
+    description: "Self-driving feature flags & experiments",
+    images: ["/helix-brand-assets/png/og-image.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Helix",
+    description: "Self-driving feature flags & experiments",
+    images: ["/helix-brand-assets/png/og-image.png"],
+  },
 };
 
 export default function RootLayout({
