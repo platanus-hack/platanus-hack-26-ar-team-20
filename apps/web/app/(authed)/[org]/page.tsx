@@ -1,13 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  FlaskConical,
-  GitPullRequestArrow,
-  ShieldCheck,
-  TriangleAlert,
-} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -51,6 +43,7 @@ type ExperimentRow_DB = {
   results: unknown;
   consolidated_at: string | null;
   repo_id: string;
+  pr_url: string | null;
   repos: { github_repo_full_name: string } | null;
 };
 
@@ -58,15 +51,6 @@ type RepoRow = {
   id: string;
   flag_provider: string;
   analytics_provider: string;
-};
-
-type DecisionRow = {
-  id: string;
-  action: string;
-  rationale: string | null;
-  created_at: string;
-  experiment_id: string | null;
-  experiments: { experiment_id: string } | null;
 };
 
 type WitnessVariantVerdict = {
@@ -105,25 +89,6 @@ function liftPpFromResults(results: unknown): number {
   return (w - c) * 100;
 }
 
-function decisionMeta(action: string): {
-  icon: typeof GitPullRequestArrow;
-  title: string;
-} {
-  switch (action) {
-    case "ship_winner":
-      return { icon: GitPullRequestArrow, title: "Ship winner" };
-    case "kill_variant":
-      return { icon: TriangleAlert, title: "Kill variant" };
-    case "kill_all":
-      return { icon: TriangleAlert, title: "Kill all variants" };
-    case "extend_top_two":
-      return { icon: FlaskConical, title: "Extend top two" };
-    case "schedule_consolidate":
-      return { icon: ShieldCheck, title: "Consolidate winner" };
-    default:
-      return { icon: ShieldCheck, title: action };
-  }
-}
 
 export default async function OrgOverviewPage({
   params,
@@ -147,15 +112,13 @@ export default async function OrgOverviewPage({
     activeExpsRes,
     activeCountRes,
     shippedExpsRes,
-    pendingCountRes,
-    pendingListRes,
     reposRes,
     shippedCountRes,
   ] = await Promise.all([
     supabase
       .from("experiments")
       .select(
-        "id, experiment_id, status, started_at, variants, results, consolidated_at, repo_id, repos(github_repo_full_name)"
+        "id, experiment_id, status, started_at, variants, results, consolidated_at, repo_id, pr_url, repos(github_repo_full_name)"
       )
       .order("started_at", { ascending: false, nullsFirst: false })
       .limit(10),
@@ -163,36 +126,19 @@ export default async function OrgOverviewPage({
       .from("experiments")
       .select("id", { count: "exact", head: true })
       .in("status", ACTIVE_STATUSES as unknown as string[]),
-    // For "Lift agregado 30d" we count any experiment whose winner has
-    // been shipped (or consolidated) in the last 30 days — both states
-    // mean the variant is in production with a measurable effect.
+    // For "Lift agregado 30d" we count shipped/consolidated experiments.
     supabase
       .from("experiments")
       .select("results, shipped_at")
       .in("status", ["shipped", "consolidated"])
       .gte("shipped_at", since30d),
-    supabase
-      .from("decisions")
-      .select("id", { count: "exact", head: true })
-      .eq("human_required", true)
-      .is("human_approved_at", null),
-    supabase
-      .from("decisions")
-      .select(
-        "id, action, rationale, created_at, experiment_id, experiments(experiment_id)"
-      )
-      .eq("human_required", true)
-      .is("human_approved_at", null)
-      .order("created_at", { ascending: false })
-      .limit(3),
     supabase.from("repos").select("id, flag_provider, analytics_provider"),
-    // "Features shipped (30d)" — count of experiments whose winner went
-    // live in the last 30 days, so the dashboard always has a non-zero
-    // signal once even one demo loop has run.
+    // "Features shipped (30d)" — count of experiments that are fully
+    // consolidated (winner inlined, flag deleted) in the last 30 days.
     supabase
       .from("experiments")
       .select("id", { count: "exact", head: true })
-      .in("status", ["shipped", "consolidated"])
+      .eq("status", "consolidated")
       .gte("shipped_at", since30d),
   ]);
 
@@ -200,11 +146,9 @@ export default async function OrgOverviewPage({
   const shippedExps = (shippedExpsRes.data ?? []) as Array<{
     results: unknown;
   }>;
-  const pendingDecisions = (pendingListRes.data ?? []) as unknown as DecisionRow[];
   const repos = (reposRes.data ?? []) as RepoRow[];
 
   const activeCount = activeCountRes.count ?? activeExps.length;
-  const pendingCount = pendingCountRes.count ?? pendingDecisions.length;
   const shippedCount = shippedCountRes.count ?? shippedExps.length;
 
   const aggLiftPp = shippedExps.reduce(
@@ -223,6 +167,7 @@ export default async function OrgOverviewPage({
     variantsCount: variantsCount(e.variants),
     daysLive: daysSince(e.started_at),
     status: e.status,
+    prUrl: e.pr_url ?? null,
   }));
 
   // Land the user on the demo experiment after a 5s "reading the repo"
@@ -254,7 +199,7 @@ export default async function OrgOverviewPage({
         </Badge>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Experimentos activos</CardDescription>
@@ -284,20 +229,6 @@ export default async function OrgOverviewPage({
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               suma de winners shippeados
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Pending decisions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-semibold tabular-nums">
-              {pendingCount}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              esperan aprobación humana
             </p>
           </CardContent>
         </Card>
@@ -338,6 +269,7 @@ export default async function OrgOverviewPage({
                   <TableHead>Variants</TableHead>
                   <TableHead>Días live</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>PR</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -354,55 +286,6 @@ export default async function OrgOverviewPage({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Decisiones esperando tu OK</CardTitle>
-          <CardDescription>
-            Acciones que el Director propuso pero requieren aprobación humana.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {pendingDecisions.length === 0 ? (
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Nada pendiente. Helix está corriendo en autopilot.
-            </div>
-          ) : (
-            <ul className="divide-y">
-              {pendingDecisions.map((d) => {
-                const meta = decisionMeta(d.action);
-                const Icon = meta.icon;
-                const expSlug = d.experiments?.experiment_id;
-                const reviewHref = expSlug
-                  ? `/${orgSlug}/experiments/${expSlug}#decisions`
-                  : `/${orgSlug}/audit`;
-
-                return (
-                  <li
-                    key={d.id}
-                    className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium">{meta.title}</div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {d.rationale ??
-                          (expSlug
-                            ? `Experimento ${expSlug}`
-                            : "Pending decision")}
-                      </div>
-                    </div>
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={reviewHref}>Review</Link>
-                    </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
