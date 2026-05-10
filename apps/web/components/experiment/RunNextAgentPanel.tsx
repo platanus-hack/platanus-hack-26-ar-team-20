@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   FastForward,
@@ -71,6 +71,18 @@ export function RunNextAgentPanel({
   const [, startTransition] = useTransition();
   const router = useRouter();
   const [runAllOpen, setRunAllOpen] = useState(false);
+
+  // The welcome modal redirects here with `?autorun=1` so the user lands
+  // straight in the run-all flow without an extra click. Strip the param
+  // after triggering so refreshing doesn't reopen it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("autorun") !== "1") return;
+    setRunAllOpen(true);
+    url.searchParams.delete("autorun");
+    router.replace(url.pathname + (url.search || ""));
+  }, [router]);
 
   const buttons: ButtonSpec[] = [
     {

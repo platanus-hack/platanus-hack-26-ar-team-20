@@ -63,7 +63,12 @@ export function WelcomeModal({
     const redirectTimer = setTimeout(() => {
       setProgress(100);
       setStepIdx(STEPS.length - 1);
-      router.push(`/${orgSlug}/experiments/${experimentSlug}`);
+      // The `autorun` flag tells ExperimentClient to immediately open the
+      // run-all modal so the user doesn't have to click "Run full loop"
+      // after the intro animation.
+      router.push(
+        `/${orgSlug}/experiments/${experimentSlug}?autorun=1`
+      );
     }, TOTAL_MS);
 
     return () => {
@@ -75,7 +80,9 @@ export function WelcomeModal({
 
   const skip = () => {
     setOpen(false);
-    router.push(`/${orgSlug}/experiments/${experimentSlug}`);
+    router.push(
+      `/${orgSlug}/experiments/${experimentSlug}?autorun=1`
+    );
   };
 
   return (
