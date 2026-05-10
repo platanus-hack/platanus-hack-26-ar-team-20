@@ -253,24 +253,63 @@ class ArchitectAgent(BaseAgent):
     ) -> str:
         repo_obj = self.github._gh.get_repo(repo)
         owner_login = repo_obj.owner.login
+        head = f"{owner_login}:{branch}"
+
+        # Open PR for this branch — edit body, return.
         try:
-            existing = list(
-                repo_obj.get_pulls(
-                    state="open", head=f"{owner_login}:{branch}", base=base
-                )
+            open_prs = list(
+                repo_obj.get_pulls(state="open", head=head, base=base)
             )
         except GithubException:
-            existing = []
-        if existing:
-            existing_pr = existing[0]
+            open_prs = []
+        if open_prs:
+            pr = open_prs[0]
             try:
-                existing_pr.edit(body=body)
+                pr.edit(body=body)
             except GithubException:
                 pass
-            return existing_pr.html_url
-        return self.github.create_pr(
+            self._merge_pr_safely(pr, title=title)
+            return pr.html_url
+
+        # No open PR but a previous run might have merged one — return it
+        # so the demo flow stays idempotent across replays.
+        try:
+            closed_prs = list(
+                repo_obj.get_pulls(state="closed", head=head, base=base)
+            )
+        except GithubException:
+            closed_prs = []
+        merged = next((p for p in closed_prs if p.merged), None)
+        if merged is not None:
+            return merged.html_url
+
+        # No PR at all — create one and merge it.
+        pr_url = self.github.create_pr(
             repo=repo, head=branch, base=base, title=title, body=body
         )
+        try:
+            pr_number = int(pr_url.rsplit("/", 1)[-1])
+            pr = repo_obj.get_pull(pr_number)
+            self._merge_pr_safely(pr, title=title)
+        except (GithubException, ValueError):
+            # Creation succeeded; the merge is best-effort.
+            pass
+        return pr_url
+
+    @staticmethod
+    def _merge_pr_safely(pr, *, title: str) -> None:
+        """Squash-merge the multivariate PR. Silently skip if the PR is
+        already merged, has conflicts, or branch protection blocks it —
+        the demo just shows the PR link in either case."""
+        if pr.merged:
+            return
+        try:
+            pr.merge(
+                merge_method="squash",
+                commit_title=f"{title} (auto-merged by Helix Architect)",
+            )
+        except GithubException:
+            pass
 
     # ------------------------------------------------------------------
     # PR body
