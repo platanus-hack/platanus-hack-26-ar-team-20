@@ -54,7 +54,7 @@ const STEPS: StepConfig[] = [
   {
     key: "reset",
     agentLabel: "Helix",
-    title: "Resetting demo state",
+    title: "Resetting experiment state",
     description:
       "Limpia agent_runs, decisions y restaura el experimento al estado 'designing' inicial.",
   },
@@ -77,7 +77,7 @@ const STEPS: StepConfig[] = [
     agentLabel: "Helix",
     title: "Fast-forwarding observation window",
     description:
-      "Comprimo 7 días de tráfico para que Witness vea la muestra al instante (solo en modo demo).",
+      "Comprimo 7 días de tráfico para que Witness vea la muestra al instante.",
   },
   {
     key: "witness",
@@ -98,7 +98,7 @@ const STEPS: StepConfig[] = [
     agentLabel: "Helix",
     title: "Fast-forwarding consolidation grace",
     description:
-      "Comprimo los 7 días de gracia post-ship antes del cleanup (solo en modo demo).",
+      "Comprimo los 7 días de gracia post-ship antes del cleanup.",
   },
   {
     key: "consolidate",
@@ -296,7 +296,7 @@ export function RunAllModal({
           </DialogTitle>
           <DialogDescription>
             Brief → Lab → Architect → Witness → Director → Consolidate. Tarda
-            ~30s con datos cacheados (modo demo).
+            ~30s con datos cacheados.
           </DialogDescription>
         </DialogHeader>
 

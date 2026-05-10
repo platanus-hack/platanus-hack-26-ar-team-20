@@ -161,7 +161,6 @@ export default async function OrgOverviewPage({
       .select(
         "id, experiment_id, status, started_at, variants, results, consolidated_at, repo_id, repos(github_repo_full_name)"
       )
-      .in("status", ACTIVE_STATUSES as unknown as string[])
       .order("started_at", { ascending: false, nullsFirst: false })
       .limit(10),
     supabase
@@ -324,15 +323,15 @@ export default async function OrgOverviewPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Experimentos activos</CardTitle>
+          <CardTitle>Experimentos</CardTitle>
           <CardDescription>
-            Últimos 10 experimentos en running, analyzing o consolidating.
+            Últimos 10 experimentos por fecha de inicio.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {tableRows.length === 0 ? (
             <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              No hay experimentos activos.
+              No hay experimentos todavía.
             </div>
           ) : (
             <Table>

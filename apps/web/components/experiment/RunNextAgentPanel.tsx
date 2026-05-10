@@ -165,7 +165,17 @@ export function RunNextAgentPanel({
     startTransition(async () => {
       const result = await runDemoReset(orgPath);
       if (result.ok) {
-        toast.success("Demo state reset");
+        toast.success("Experiment reset");
+        // Reopen the "reading the repo" intro on next dashboard visit and
+        // bounce there so the user re-enters the flow from the top.
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("helix:welcomed");
+        }
+        const orgSlug = orgPath.split("/").filter(Boolean)[0];
+        if (orgSlug) {
+          router.push(`/${orgSlug}`);
+          return;
+        }
       } else {
         toast.error(`Reset failed: ${result.error}`);
       }
@@ -185,7 +195,7 @@ export function RunNextAgentPanel({
           variant="ghost"
           onClick={triggerReset}
           disabled={pendingAgent !== null}
-          title="Reset the demo experiment back to a clean 'designing' state"
+          title="Reset the experiment back to a clean 'designing' state"
         >
           <RefreshCcw className="h-3.5 w-3.5" />
           Reset
@@ -199,7 +209,7 @@ export function RunNextAgentPanel({
         disabled={pendingAgent !== null}
       >
         <Zap className="h-4 w-4" />
-        Run full demo loop
+        Run full loop
         <span className="text-xs opacity-70">(~30s)</span>
       </Button>
 
