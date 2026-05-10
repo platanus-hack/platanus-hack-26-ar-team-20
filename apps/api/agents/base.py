@@ -74,6 +74,13 @@ class BaseAgent(ABC):
         return tokens_in * 3 / 1_000_000 + tokens_out * 15 / 1_000_000
 
     def _load_prompt(self) -> str:
-        # apps/api/agents/base.py -> parents[3] = repo root
-        p = Path(__file__).parents[3] / "packages" / "prompts" / f"{self.name}.md"
-        return p.read_text()
+        # Locally prompts live at <repo>/packages/prompts/. The Railway
+        # Docker image flattens the monorepo and copies them to
+        # /packages/prompts/. Walk up from this file looking for either.
+        for ancestor in Path(__file__).resolve().parents:
+            candidate = ancestor / "packages" / "prompts" / f"{self.name}.md"
+            if candidate.exists():
+                return candidate.read_text()
+        raise FileNotFoundError(
+            f"prompt {self.name}.md not found in any ancestor packages/prompts/"
+        )
