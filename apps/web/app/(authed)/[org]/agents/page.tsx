@@ -102,7 +102,7 @@ export default function AgentsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[176px]">Demo</TableHead>
+              <TableHead className="w-[152px]">Demo</TableHead>
               <TableHead className="w-[140px]">Agent</TableHead>
               <TableHead className="w-[110px]">Role</TableHead>
               <TableHead>Description</TableHead>
@@ -112,7 +112,10 @@ export default function AgentsPage() {
             {AGENTS.map((agent) => (
               <TableRow key={agent.name} className="align-middle">
                 <TableCell className="py-2">
-                  <div className="aspect-video w-[144px] overflow-hidden rounded-md border border-border bg-black">
+                  {/* Container matches the videos' native 4:3 so they
+                      fill edge-to-edge without black bars. Width tuned so
+                      all 7 rows fit on a typical laptop without scroll. */}
+                  <div className="aspect-[4/3] w-[120px] overflow-hidden rounded-md border border-border bg-surface-3">
                     <video
                       src={agent.video}
                       autoPlay
@@ -120,7 +123,7 @@ export default function AgentsPage() {
                       muted
                       playsInline
                       preload="metadata"
-                      className="h-full w-full object-contain"
+                      className="h-full w-full object-cover"
                       aria-label={`${agent.name} agent demo`}
                     />
                   </div>

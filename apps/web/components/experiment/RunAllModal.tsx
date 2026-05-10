@@ -376,7 +376,9 @@ function ActiveStepPanel({
 }) {
   return (
     <div className="space-y-4 px-5 py-5">
-      <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
+      {/* Container matches the videos' native 4:3 (1112×834) so nothing
+          letterboxes — the agent demos fill edge-to-edge. */}
+      <div className="aspect-[4/3] overflow-hidden rounded-lg border border-border bg-surface-3">
         <video
           key={config.video}
           src={config.video}
@@ -385,7 +387,7 @@ function ActiveStepPanel({
           muted
           playsInline
           preload="metadata"
-          className="h-full w-full object-contain"
+          className="h-full w-full object-cover"
           aria-label={`${config.agentLabel} agent demo`}
         />
       </div>
