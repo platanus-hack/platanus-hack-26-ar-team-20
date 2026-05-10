@@ -16,6 +16,7 @@ import {
 } from "@/components/experiment/RunNextAgentPanel";
 import { RunAllModal } from "@/components/experiment/RunAllModal";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { WelcomeModal } from "@/components/dashboard/WelcomeModal";
 
 // Slug allowlist for the auto-run loop. The modal kicks off Lab → Compose →
 // Witness → Director, but Compose only succeeds against experiments whose
@@ -127,24 +128,29 @@ export function ExperimentClient(props: ExperimentClientProps) {
 
   const router = useRouter();
   const [pendingAgent, setPendingAgent] = useState<AgentName | null>(null);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [runAllOpen, setRunAllOpen] = useState(false);
   const orgPath = `/${orgSlug}/experiments/${experimentSlug}`;
 
-  // Auto-kick the full Brief→Lab→Compose→Witness→Director loop the moment
-  // someone lands on a `designing` demo experiment. The modal stops at the
-  // "Esperando resultados" panel (Director ramps the winner; Witness then
-  // re-confirms with real traffic across the 7-day observation window) and
-  // surfaces the PR link there. The status itself acts as the gate — once
-  // the loop completes the experiment leaves `designing`, so this won't
-  // re-fire on subsequent renders. After a manual /reset back to
-  // designing, the modal will auto-open again, which is what we want.
+  // Demo flow on landing into the seed experiment in `designing`:
+  //   1. WelcomeModal — 5s "Helix is reading your repo" intro
+  //   2. RunAllModal  — Lab → Architect → Witness → Director
+  //   3. "Esperando resultados" panel with the PR link
+  // Status drives the gate: once the loop completes the experiment leaves
+  // `designing`, so this useEffect won't re-fire. A manual /reset back to
+  // designing replays the whole sequence, which is what we want.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!fastForwardEnabled) return;
     if (status !== "designing") return;
     if (!AUTO_RUN_LOOP_SLUGS.has(experimentSlug)) return;
-    setRunAllOpen(true);
+    setWelcomeOpen(true);
   }, [status, experimentSlug, fastForwardEnabled]);
+
+  const handleWelcomeComplete = () => {
+    setWelcomeOpen(false);
+    setRunAllOpen(true);
+  };
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -225,6 +231,7 @@ export function ExperimentClient(props: ExperimentClientProps) {
 
   return (
     <div className="w-full min-w-0 space-y-8">
+      <WelcomeModal open={welcomeOpen} onComplete={handleWelcomeComplete} />
       <RunAllModal
         experimentRowId={experimentRowId}
         experimentSlug={experimentSlug}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Check,
   Github,
@@ -18,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEY = "helix:welcomed";
 const TOTAL_MS = 5000;
 
 const STEPS = [
@@ -30,24 +28,33 @@ const STEPS = [
 
 const STEP_INTERVAL = TOTAL_MS / STEPS.length;
 
+// Controlled "Helix is reading your repo" intro. The parent decides when
+// to show it (e.g. only when entering the demo experiment) and gets a
+// callback when the 5s indexing animation finishes — typically used to
+// chain into RunAllModal.
 export function WelcomeModal({
-  experimentSlug,
-  orgSlug,
+  open,
+  onComplete,
 }: {
-  experimentSlug: string;
-  orgSlug: string;
+  open: boolean;
+  onComplete: () => void;
 }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
   const [progress, setProgress] = useState(0);
   const startedAtRef = useRef<number | null>(null);
+  const completedRef = useRef(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (sessionStorage.getItem(STORAGE_KEY) === "1") return;
-    sessionStorage.setItem(STORAGE_KEY, "1");
-    setOpen(true);
+    if (!open) {
+      // Reset between opens so a re-trigger (e.g. after a /reset) plays
+      // the indexing animation from scratch.
+      setStepIdx(0);
+      setProgress(0);
+      startedAtRef.current = null;
+      completedRef.current = false;
+      return;
+    }
+
     startedAtRef.current = Date.now();
 
     const stepTimer = setInterval(() => {
@@ -60,22 +67,26 @@ export function WelcomeModal({
       setProgress(Math.min(100, (elapsed / TOTAL_MS) * 100));
     }, 60);
 
-    const redirectTimer = setTimeout(() => {
+    const completeTimer = setTimeout(() => {
       setProgress(100);
       setStepIdx(STEPS.length - 1);
-      router.push(`/${orgSlug}/experiments/${experimentSlug}?autorun=1`);
+      if (!completedRef.current) {
+        completedRef.current = true;
+        onComplete();
+      }
     }, TOTAL_MS);
 
     return () => {
       clearInterval(stepTimer);
       clearInterval(progressTimer);
-      clearTimeout(redirectTimer);
+      clearTimeout(completeTimer);
     };
-  }, [orgSlug, experimentSlug, router]);
+  }, [open, onComplete]);
 
   const skip = () => {
-    setOpen(false);
-    router.push(`/${orgSlug}/experiments/${experimentSlug}?autorun=1`);
+    if (completedRef.current) return;
+    completedRef.current = true;
+    onComplete();
   };
 
   return (
