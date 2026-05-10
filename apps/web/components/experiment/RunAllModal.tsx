@@ -376,7 +376,7 @@ function ActiveStepPanel({
 }) {
   return (
     <div className="space-y-4 px-5 py-5">
-      <div className="aspect-video overflow-hidden rounded-lg border border-border bg-surface-3">
+      <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
         <video
           key={config.video}
           src={config.video}
@@ -385,7 +385,7 @@ function ActiveStepPanel({
           muted
           playsInline
           preload="metadata"
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
           aria-label={`${config.agentLabel} agent demo`}
         />
       </div>

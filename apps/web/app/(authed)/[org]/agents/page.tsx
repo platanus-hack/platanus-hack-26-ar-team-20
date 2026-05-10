@@ -72,16 +72,16 @@ const AGENTS: Agent[] = [
 
 export default function AgentsPage() {
   return (
-    <div className="space-y-10">
-      {/* Page header — Linear-quality. Mirrors the Overview page. */}
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-2">
+    <div className="space-y-5">
+      {/* Page header — compact so all 7 agent rows fit without scroll. */}
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-1">
           <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground/70">
             Workspace agents
           </p>
-          <h1 className="flex items-center gap-2.5 text-3xl font-semibold tracking-tight text-foreground">
+          <h1 className="flex items-center gap-2.5 text-2xl font-semibold tracking-tight text-foreground">
             <span>Agents</span>
-            <span aria-hidden role="img" className="text-[26px] leading-none">
+            <span aria-hidden role="img" className="text-[22px] leading-none">
               🤖
             </span>
           </h1>
@@ -95,25 +95,24 @@ export default function AgentsPage() {
         </div>
       </header>
 
-      {/* Agents table — premium, hairline-bordered, mirrors the
-          dashboard's experiments table. Video sits in the first column at
-          a comfortable 16:9 size; the rest of the row is name + role +
-          description. All 7 agents fit without horizontal scroll. */}
+      {/* Agents table — premium, hairline-bordered. Tight rows so the 7
+          agents fit on a typical laptop viewport without scroll, and the
+          video uses object-contain so nothing gets cropped. */}
       <section className="overflow-hidden rounded-xl border border-border bg-surface-2/40">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[260px]">Demo</TableHead>
-              <TableHead className="w-[160px]">Agent</TableHead>
-              <TableHead className="w-[120px]">Role</TableHead>
+              <TableHead className="w-[176px]">Demo</TableHead>
+              <TableHead className="w-[140px]">Agent</TableHead>
+              <TableHead className="w-[110px]">Role</TableHead>
               <TableHead>Description</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {AGENTS.map((agent) => (
-              <TableRow key={agent.name} className="align-top">
-                <TableCell className="py-3">
-                  <div className="aspect-video w-[228px] overflow-hidden rounded-lg border border-border bg-surface-3">
+              <TableRow key={agent.name} className="align-middle">
+                <TableCell className="py-2">
+                  <div className="aspect-video w-[144px] overflow-hidden rounded-md border border-border bg-black">
                     <video
                       src={agent.video}
                       autoPlay
@@ -121,23 +120,23 @@ export default function AgentsPage() {
                       muted
                       playsInline
                       preload="metadata"
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain"
                       aria-label={`${agent.name} agent demo`}
                     />
                   </div>
                 </TableCell>
-                <TableCell>
-                  <span className="text-[13.5px] font-medium tracking-tight text-foreground">
+                <TableCell className="py-2">
+                  <span className="text-[13px] font-medium tracking-tight text-foreground">
                     {agent.name}
                   </span>
                 </TableCell>
-                <TableCell>
+                <TableCell className="py-2">
                   <span className="inline-flex items-center rounded-md border border-border bg-surface-3/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground-strong">
                     {agent.role}
                   </span>
                 </TableCell>
-                <TableCell>
-                  <p className="max-w-[58ch] text-[12.5px] leading-relaxed text-muted-foreground">
+                <TableCell className="py-2">
+                  <p className="max-w-[64ch] text-[12px] leading-snug text-muted-foreground">
                     {agent.description}
                   </p>
                 </TableCell>
