@@ -319,30 +319,32 @@ export function ExperimentClient(props: ExperimentClientProps) {
 }
 
 function ProblemView({ problem }: { problem: Problem }) {
-  const rows: { label: string; value: React.ReactNode }[] = [
-    { label: "Tipo", value: problem.type ?? "—" },
-    { label: "Superficie", value: problem.surface_area ?? "—" },
-    { label: "KPI primario", value: problem.primary_kpi ?? "—" },
+  const rows: { label: string; values: string[] }[] = [
+    { label: "Tipo", values: [problem.type ?? "—"] },
+    { label: "Superficie", values: [problem.surface_area ?? "—"] },
+    { label: "KPI primario", values: [problem.primary_kpi ?? "—"] },
     {
       label: "Valor actual",
-      value:
+      values: [
         problem.current_value !== null && problem.current_value !== undefined
           ? `${(problem.current_value * 100).toFixed(1)}%`
           : "—",
+      ],
     },
     {
       label: "Target lift",
-      value:
+      values: [
         problem.target_lift_pp !== undefined
           ? `+${problem.target_lift_pp}pp`
           : "—",
+      ],
     },
     {
       label: "Guardrails",
-      value:
+      values:
         problem.guardrail_kpis && problem.guardrail_kpis.length > 0
-          ? problem.guardrail_kpis.join(", ")
-          : "—",
+          ? problem.guardrail_kpis
+          : ["—"],
     },
   ];
 
@@ -353,7 +355,16 @@ function ProblemView({ problem }: { problem: Problem }) {
           <dt className="text-xs uppercase tracking-wide text-muted-foreground">
             {row.label}
           </dt>
-          <dd className="mt-0.5 font-mono text-sm">{row.value}</dd>
+          <dd className="mt-1.5 flex flex-wrap gap-1">
+            {row.values.map((v) => (
+              <span
+                key={v}
+                className="inline-flex items-center rounded-md border bg-muted/40 px-2 py-0.5 font-mono text-xs"
+              >
+                {v}
+              </span>
+            ))}
+          </dd>
         </div>
       ))}
     </dl>
